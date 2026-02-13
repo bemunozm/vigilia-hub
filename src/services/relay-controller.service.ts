@@ -1,11 +1,12 @@
-import { Gpio } from 'onoff';
+import { Gpio } from '../utils/gpio-wrapper';
 import { Logger } from '../utils/logger';
 
 export class RelayControllerService {
   private readonly logger = new Logger(RelayControllerService.name);
   
-  private audioRelay1: Gpio;
-  private audioRelay2: Gpio;
+  private audioRelay1: Gpio | null = null;
+  private audioRelay2: Gpio | null = null;
+  private isAvailable: boolean = false;
   
   private readonly MAX_INTERCEPT_TIME: number;
   private readonly RELAY_SETTLING_TIME_MS: number;
@@ -28,13 +29,23 @@ export class RelayControllerService {
       this.audioRelay1.writeSync(0);
       this.audioRelay2.writeSync(0);
       
+      this.isAvailable = true;
       this.setupSafetyHandlers();
       
       this.logger.log(`✅ Relés inicializados en GPIO ${relay1Pin}, ${relay2Pin}`);
     } catch (error) {
-      this.logger.error('Error inicializando relés', error);
-      throw error;
+      this.isAvailable = false;
+      this.logger.warn(`⚠️ Relés no disponibles (modo desarrollo sin hardware)`);
+      this.logger.debug(`Detalle error relés: ${error.message}`);
+      // NO lanzar error - permitir ejecución en desarrollo
     }
+  }
+  
+  /**
+   * Verifica si hardware de relés está disponible
+   */
+  public isRelayAvailable(): boolean {
+    return this.isAvailable;
   }
 
   /**
@@ -45,11 +56,13 @@ export class RelayControllerService {
       this.logger.warn(`Señal ${signal} recibida, liberando GPIOs...`);
       this.forceDisableInterception();
       
-      try {
-        this.audioRelay1.unexport();
-        this.audioRelay2.unexport();
-      } catch (error) {
-        // Ignorar
+      if (this.isAvailable) {
+        try {
+          this.audioRelay1!.unexport();
+          this.audioRelay2!.unexport();
+        } catch (error) {
+          // Ignorar
+        }
       }
       
       setTimeout(() => process.exit(0), 100);
@@ -74,6 +87,11 @@ export class RelayControllerService {
    * Activa intercepción con protección contra "pop"
    */
   async enableInterception(): Promise<void> {
+    if (!this.isAvailable) {
+      this.logger.debug('Relés no disponibles (modo desarrollo)');
+      return;
+    }
+    
     if (this.isIntercepting) {
       this.logger.warn('Ya está interceptando, ignorando');
       return;
@@ -82,8 +100,8 @@ export class RelayControllerService {
     this.logger.log('🔌 ACTIVANDO INTERCEPCIÓN (Relés ON)');
     
     // Activar relés
-    this.audioRelay1.writeSync(1);
-    this.audioRelay2.writeSync(1);
+    this.audioRelay1!.writeSync(1);
+    this.audioRelay2!.writeSync(1);
     
     this.isIntercepting = true;
 
@@ -103,6 +121,10 @@ export class RelayControllerService {
    * Desactiva intercepción suavemente
    */
   async disableInterception(): Promise<void> {
+    if (!this.isAvailable) {
+      return;
+    }
+    
     if (!this.isIntercepting) {
       return;
     }
@@ -113,8 +135,8 @@ export class RelayControllerService {
     await this.delay(500);
     
     // Apagar relés
-    this.audioRelay1.writeSync(0);
-    this.audioRelay2.writeSync(0);
+    this.audioRelay1!.writeSync(0);
+    this.audioRelay2!.writeSync(0);
     
     this.isIntercepting = false;
 
@@ -130,9 +152,11 @@ export class RelayControllerService {
    * Fuerza desactivación sin checks (emergencias)
    */
   private forceDisableInterception(): void {
+    if (!this.isAvailable) return;
+    
     try {
-      this.audioRelay1.writeSync(0);
-      this.audioRelay2.writeSync(0);
+      this.audioRelay1!.writeSync(0);
+      this.audioRelay2!.writeSync(0);
       this.isIntercepting = false;
       
       if (this.watchdogTimer) {
@@ -163,9 +187,11 @@ export class RelayControllerService {
   cleanup(): void {
     this.forceDisableInterception();
     
+    if (!this.isAvailable) return;
+    
     try {
-      this.audioRelay1.unexport();
-      this.audioRelay2.unexport();
+      this.audioRelay1!.unexport();
+      this.audioRelay2!.unexport();
       this.logger.log('Relés limpiados');
     } catch (error) {
       // Ignorar
