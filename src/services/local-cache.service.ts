@@ -69,7 +69,7 @@ export class LocalCacheService {
     try {
       this.logger.log('🔄 Sincronizando con backend...');
       
-      const response = await axios.get(`${backendUrl}/units/ai-enabled`, {
+      const response = await axios.get(`${backendUrl}/api/v1/units/ai-enabled`, {
         headers: { 'X-Hub-Secret': hubSecret },
         timeout: 5000,
       });

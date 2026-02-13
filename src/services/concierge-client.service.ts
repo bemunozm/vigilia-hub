@@ -37,7 +37,7 @@ export class ConciergeClientService {
       this.logger.log('🎫 Solicitando token efímero al backend...');
       
       // Obtener token efímero y sessionId del backend
-      const response = await axios.post(`${this.backendUrl}/concierge/session/start`, {
+      const response = await axios.post(`${this.backendUrl}/api/v1/concierge/session/start`, {
         socketId: this.websocketClient.getSocketId(),
       });
 
@@ -419,7 +419,7 @@ Contexto técnico:
     // Notificar al backend que finalizó la sesión
     if (this.currentSessionId) {
       try {
-        await axios.post(`${this.backendUrl}/concierge/session/${this.currentSessionId}/end`, {
+        await axios.post(`${this.backendUrl}/api/v1/concierge/session/${this.currentSessionId}/end`, {
           finalStatus: 'completed',
         });
         this.logger.log(`✅ Sesión ${this.currentSessionId} finalizada en el backend`);
