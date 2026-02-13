@@ -1,48 +1,58 @@
 import WebSocket from 'ws';
+import axios from 'axios';
 import { Logger } from '../utils/logger';
 import { WebSocketClientService } from './websocket-client.service';
 
 /**
  * Cliente para OpenAI Realtime API
- * Implementación directa con WebSocket
- * 
- * NOTA: OpenAI Realtime API requiere conexión WebSocket a:
- * wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01
+ * Se conecta a través del backend para obtener tokens efímeros
  */
 export class ConciergeClientService {
   private readonly logger = new Logger(ConciergeClientService.name);
   private ws: WebSocket | null = null;
   private currentSessionId: string | null = null;
   private conversationActive = false;
-  private apiKey: string;
+  private backendUrl: string;
   private audioHandlers: ((audioBuffer: Buffer) => void)[] = [];
 
   constructor(
     private readonly websocketClient: WebSocketClientService
   ) {
-    const apiKey = process.env.OPENAI_API_KEY;
+    const backendUrl = process.env.BACKEND_API_URL;
     
-    if (!apiKey) {
-      throw new Error('OPENAI_API_KEY no configurado en .env');
+    if (!backendUrl) {
+      throw new Error('BACKEND_API_URL no configurado en .env');
     }
 
-    this.apiKey = apiKey;
+    this.backendUrl = backendUrl;
     this.logger.log('✅ Concierge Client inicializado');
+    this.logger.log(`📡 Backend URL: ${this.backendUrl}`);
   }
 
   /**
-   * Conecta a OpenAI Realtime API
+   * Conecta a OpenAI Realtime API usando token efímero del backend
    */
   async connect(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      try {
-        this.logger.log('🤖 Conectando a OpenAI Realtime API...');
-        
-        const url = 'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01';
+    try {
+      this.logger.log('🎫 Solicitando token efímero al backend...');
+      
+      // Obtener token efímero y sessionId del backend
+      const response = await axios.post(`${this.backendUrl}/concierge/session/start`, {
+        socketId: this.websocketClient.getSocketId(),
+      });
+
+      const { sessionId, ephemeralToken } = response.data;
+      this.currentSessionId = sessionId;
+
+      this.logger.log(`✅ Token efímero obtenido. SessionId: ${sessionId}`);
+      this.logger.log('🤖 Conectando a OpenAI Realtime API...');
+
+      return new Promise((resolve, reject) => {
+        const url = 'wss://api.openai.com/v1/realtime?model=gpt-realtime-mini';
         
         this.ws = new WebSocket(url, {
           headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
+            'Authorization': `Bearer ${ephemeralToken}`,
             'OpenAI-Beta': 'realtime=v1'
           }
         });
@@ -58,12 +68,11 @@ export class ConciergeClientService {
           this.logger.error('Error en WebSocket de OpenAI', error);
           reject(error);
         });
-
-      } catch (error) {
-        this.logger.error('Error conectando a OpenAI', error);
-        reject(error);
-      }
-    });
+      });
+    } catch (error) {
+      this.logger.error('Error conectando a OpenAI', error);
+      throw error;
+    }
   }
 
   /**
@@ -395,7 +404,7 @@ Contexto técnico:
   }
 
   /**
-   * Desconecta de OpenAI
+   * Desconecta de OpenAI y notifica al backend
    */
   async disconnect(): Promise<void> {
     if (this.conversationActive) {
@@ -405,6 +414,19 @@ Contexto técnico:
     if (this.ws) {
       this.ws.close();
       this.ws = null;
+    }
+
+    // Notificar al backend que finalizó la sesión
+    if (this.currentSessionId) {
+      try {
+        await axios.post(`${this.backendUrl}/concierge/session/${this.currentSessionId}/end`, {
+          finalStatus: 'completed',
+        });
+        this.logger.log(`✅ Sesión ${this.currentSessionId} finalizada en el backend`);
+      } catch (error: any) {
+        this.logger.error(`Error finalizando sesión en backend: ${error.message}`);
+      }
+      this.currentSessionId = null;
     }
     
     this.logger.log('Desconectado de OpenAI');

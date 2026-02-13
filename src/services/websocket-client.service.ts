@@ -157,6 +157,13 @@ export class WebSocketClientService {
   }
 
   /**
+   * Obtiene el ID del socket actual (necesario para notificaciones)
+   */
+  getSocketId(): string | undefined {
+    return this.socket?.id;
+  }
+
+  /**
    * Verifica si está conectado
    */
   isConnected(): boolean {

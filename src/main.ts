@@ -58,10 +58,8 @@ class VigiliaHubApplication {
       this.websocketClient = new WebSocketClientService(this.connectivity);
       this.conciergeClient = new ConciergeClientService(this.websocketClient);
 
-      await Promise.all([
-        this.websocketClient.connect(),
-        this.conciergeClient.connect()
-      ]);
+      await this.websocketClient.connect();
+      // NOTA: conciergeClient se conecta bajo demanda cuando se inicia una conversación
 
       // 4. Audio Router (FSM)
       logger.log('🎛️ Inicializando Audio Router...');
