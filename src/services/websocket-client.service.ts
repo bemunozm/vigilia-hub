@@ -45,11 +45,12 @@ export class WebSocketClientService {
     this.io = socketIO.io;
 
     this.logger.log(`🔌 Conectando a ${this.backendUrl}/hub...`);
+    this.logger.debug(`🔑 Auth: hubId=${this.hubId}, hubSecret=${this.hubSecret ? '***' : 'MISSING'}`);
 
     this.socket = this.io(`${this.backendUrl}/hub`, {
       auth: {
         hubId: this.hubId,
-        secret: this.hubSecret
+        hubSecret: this.hubSecret  // ✅ Cambiar de "secret" a "hubSecret"
       },
       transports: ['websocket'],
       reconnection: true,
