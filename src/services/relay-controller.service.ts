@@ -33,7 +33,7 @@ export class RelayControllerService {
       this.setupSafetyHandlers();
       
       this.logger.log(`✅ Relés inicializados en GPIO ${relay1Pin}, ${relay2Pin}`);
-    } catch (error) {
+    } catch (error: any) {
       this.isAvailable = false;
       this.logger.warn(`⚠️ Relés no disponibles (modo desarrollo sin hardware)`);
       this.logger.debug(`Detalle error relés: ${error.message}`);

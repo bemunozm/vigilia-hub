@@ -22,7 +22,7 @@ export class GPIOControllerService {
       
       this.isAvailable = true;
       this.logger.log('✅ GPIO Multiplexor inicializado');
-    } catch (error) {
+    } catch (error: any) {
       this.isAvailable = false;
       this.logger.warn('⚠️ GPIO no disponible (modo desarrollo sin hardware)');
       this.logger.debug(`Detalle error GPIO: ${error.message}`);
