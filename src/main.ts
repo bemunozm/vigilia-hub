@@ -126,7 +126,6 @@ class VigiliaHubApplication {
 
     try {
       // Orden inverso de inicialización
-      if (this.testApi) await this.testApi.stop();
       if (this.audioRouter) await this.audioRouter.cleanup();
       if (this.conciergeClient) await this.conciergeClient.cleanup();
       if (this.websocketClient) this.websocketClient.cleanup();

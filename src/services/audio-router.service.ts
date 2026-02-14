@@ -84,7 +84,7 @@ export class AudioRouterService {
       }
 
       // Monitorear colgar durante conversación con IA
-      if (this.state === AudioState.AI_INTERCEPTED) {
+      if (this.state === AudioState.AI_INTERCEPT) {
         const hangupDetected = this.gpioController.isHangupDetected();
         if (hangupDetected) {
           this.logger.log('📞 Colgado detectado - Finalizando conversación IA');
