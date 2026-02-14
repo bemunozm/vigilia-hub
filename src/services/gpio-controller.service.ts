@@ -5,6 +5,7 @@ export class GPIOControllerService {
   private readonly logger = new Logger(GPIOControllerService.name);
   private muxControlPins: Gpio[] = [];
   private muxSignalPin: Gpio | null = null;
+  private hangupPin: Gpio | null = null; // GPIO para detectar colgar
   private isAvailable: boolean = false;
   private keypadMap: { [key: string]: string } = {
     '0': '0', '1': '1', '2': '2', '3': '3',
@@ -20,8 +21,14 @@ export class GPIOControllerService {
       // Pin de señal del multiplexor (conectado a teclado)
       this.muxSignalPin = new Gpio(26, 'in', 'rising');
       
+      // Pin para detectar colgar (hook switch) - GPIO 22 (Pin 15)
+      // HIGH = teléfono descolgado, LOW = colgado
+      const hangupGpio = parseInt(process.env.HANGUP_GPIO || '22', 10);
+      this.hangupPin = new Gpio(hangupGpio, 'in', 'both'); // Detectar ambos flancos
+      
       this.isAvailable = true;
       this.logger.log('✅ GPIO Multiplexor inicializado');
+      this.logger.log(`✅ GPIO Hangup inicializado en pin ${hangupGpio}`);
     } catch (error: any) {
       this.isAvailable = false;
       this.logger.warn('⚠️ GPIO no disponible (modo desarrollo sin hardware)');
@@ -91,6 +98,23 @@ export class GPIOControllerService {
   }
 
   /**
+   * Detecta si se colgó el teléfono (hook switch)
+   * LOW = colgado, HIGH = descolgado
+   */
+  isHangupDetected(): boolean {
+    if (!this.isAvailable || !this.hangupPin) {
+      return false;
+    }
+    
+    try {
+      // LOW = teléfono colgado
+      return this.hangupPin.readSync() === 0;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
    * Delay helper
    */
   private sleep(ms: number): Promise<void> {
@@ -107,6 +131,9 @@ export class GPIOControllerService {
       this.muxControlPins.forEach(pin => pin.unexport());
       if (this.muxSignalPin) {
         this.muxSignalPin.unexport();
+      }
+      if (this.hangupPin) {
+        this.hangupPin.unexport();
       }
       this.logger.log('GPIO limpiado');
     } catch (error) {

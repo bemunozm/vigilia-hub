@@ -27,6 +27,7 @@ export class AudioRouterService {
   private scanInterval: NodeJS.Timeout | null = null;
   private lastSignalTime = 0;
   private lastDialedNumber: string = ''; // Guardar número marcado para reenvío
+  private isAnalogCallActive = false; // Flag para monitorear colgar durante llamada analógica
   
   private readonly KEYPAD_TIMEOUT_MS: number;
   private readonly COOLDOWN_MS: number;
@@ -67,12 +68,22 @@ export class AudioRouterService {
   }
 
   /**
-   * Escanea el teclado continuamente
+   * Escanea el teclado y detecta colgar continuamente
    * MODO PRUEBA: Detecta señal en GPIO 26 y marca casa "15" automáticamente
    */
   private startKeypadScanning(): void {
     this.scanInterval = setInterval(async () => {
-      // Solo procesar si estamos en TRANSPARENT
+      // Monitorear colgar durante llamada analógica
+      if (this.isAnalogCallActive) {
+        const hangupDetected = this.gpioController.isHangupDetected();
+        if (hangupDetected) {
+          this.logger.log('📞 Colgado detectado - Finalizando llamada analógica');
+          this.endAnalogCall();
+        }
+        return; // No procesar teclas durante llamada activa
+      }
+
+      // Solo procesar teclas si estamos en TRANSPARENT y sin llamada activa
       if (this.state !== AudioState.TRANSPARENT) {
         return;
       }
@@ -197,8 +208,21 @@ export class AudioRouterService {
     await this.audioManager.stopPlayback();
     await this.relayController.disableInterception();
     
+    // PASO 4: Activar monitoreo de colgar
+    this.isAnalogCallActive = true;
+    this.logger.log(`📞 Llamada analógica activa - Monitoreando GPIO colgar`);
+    
     this.returnToTransparent();
     // Llamada ahora en curso entre visitante y residente vía citófono analógico
+  }
+
+  /**
+   * Finaliza llamada analógica cuando se detecta colgar
+   */
+  private endAnalogCall(): void {
+    this.isAnalogCallActive = false;
+    this.lastDialedNumber = '';
+    this.logger.log(`✅ Llamada analógica finalizada - Sistema listo para nueva llamada`);
   }
 
   /**
