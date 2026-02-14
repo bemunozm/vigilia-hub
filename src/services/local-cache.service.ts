@@ -32,7 +32,12 @@ export class LocalCacheService {
         this.cache.set(unit.houseNumber, unit);
       });
       
-      this.logger.log(`✅ Cache cargado: ${this.cache.size} unidades con IA`);
+      this.logger.log(`✅ Cache cargado desde disco: ${this.cache.size} unidades con IA`);
+      
+      // SIEMPRE sincronizar al inicio para tener datos frescos
+      this.logger.log('🔄 Sincronizando cache al iniciar...');
+      await this.syncWithBackend();
+      
     } catch (error) {
       this.logger.warn('Cache vacío, sincronizando por primera vez...');
       await this.syncWithBackend();
