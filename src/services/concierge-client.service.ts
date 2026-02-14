@@ -114,8 +114,8 @@ export class ConciergeClientService {
         // Requerido por la definición RealtimeSessionCreateRequest
         type: 'realtime' as const,
         
-        // Modalidades de salida (output_modalities según interfaz)
-        output_modalities: ['audio', 'text'] as ('audio' | 'text')[],
+        // Modalidades de salida (solo audio, no se puede combinar con text)
+        output_modalities: ['audio'] as ('audio' | 'text')[],
         
         instructions: this.getSystemInstructions(),
         tools: this.getToolDefinitions(),
