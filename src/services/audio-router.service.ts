@@ -264,15 +264,19 @@ export class AudioRouterService {
       // Solo esperamos el settling time
       await this.sleep(this.relayController['RELAY_SETTLING_TIME_MS'] || 200);
       
-      // 1. Iniciar conversación con OpenAI
+      // 1. Conectar a OpenAI (solicita token efímero al backend)
+      this.logger.log('🔌 Conectando a OpenAI Realtime API...');
+      await this.conciergeClient.connect();
+      
+      // 2. Iniciar conversación con contexto de casa
       this.conciergeClient.startConversation(houseNumber);
       
-      // 2. Configurar pipeline de audio
+      // 3. Configurar pipeline de audio
       this.setupAudioPipeline();
       
-      this.logger.log('🤖 Modo AI_INTERCEPT activo');
+      this.logger.log('🤖 Modo AI_INTERCEPT activo - Conversación iniciada');
       
-      // 3. Timeout de seguridad
+      // 4. Timeout de seguridad
       setTimeout(() => {
         if (this.state === AudioState.AI_INTERCEPT) {
           this.logger.warn('⏰ Timeout de conversación, finalizando');
