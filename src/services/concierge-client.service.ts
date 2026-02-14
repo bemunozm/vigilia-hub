@@ -110,49 +110,34 @@ export class ConciergeClientService {
     }
 
     // Configuración de sesión según documentación oficial
-    // https://platform.openai.com/docs/api-reference/realtime
+    // https://platform.openai.com/docs/api-reference/realtime-client-events/session-update
     const sessionConfig = {
       type: 'session.update',
       session: {
-        // Modalidades requeridas: Audio para voz, Texto para function calling
+        // Modalidades (text + audio para permitir function calling y respuesta de voz)
         modalities: ['text', 'audio'],
         
         // Instrucciones del sistema
         instructions: this.getSystemInstructions(),
         
-        // Configuración de audio (estructura anidada según RealtimeAudioConfig)
-        audio: {
-          // Input: audio del usuario
-          input: {
-            // Formato PCM16 (24kHz es el único samplerate soportado)
-            format: {
-              type: 'audio/pcm',
-              rate: 24000
-            },
-            
-            // Transcripción opcional (usando whisper-1 por compatibilidad garantizada)
-            transcription: {
-              model: 'whisper-1',
-              language: 'es'
-            },
-            
-            // Server VAD para detección automática de turnos
-            turn_detection: {
-              type: 'server_vad',
-              threshold: 0.5,
-              prefix_padding_ms: 300,
-              silence_duration_ms: 500
-            }
-          },
-          
-          // Output: audio del asistente
-          output: {
-            format: {
-              type: 'audio/pcm',
-              rate: 24000
-            },
-            voice: 'sage'
-          }
+        // Voz del asistente
+        voice: 'sage',
+
+        // Formatos de audio (Strings simples, no objetos)
+        input_audio_format: 'pcm16',
+        output_audio_format: 'pcm16',
+        
+        // Configuración de transcripción (Top-level en session)
+        input_audio_transcription: {
+          model: 'whisper-1'
+        },
+        
+        // Detección de turnos (Top-level en session)
+        turn_detection: {
+          type: 'server_vad',
+          threshold: 0.5,
+          prefix_padding_ms: 300,
+          silence_duration_ms: 500
         },
         
         // Herramientas disponibles
