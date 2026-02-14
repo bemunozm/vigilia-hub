@@ -108,13 +108,12 @@ export class ConciergeClientService {
     }
 
     // Configurar sesión usando el SDK con formato GA correcto
-    // Nota: turn_detection está implícito en GA (semantic_vad por defecto)
+    // Nota: voice se configura en response.create, no en session
     const sessionConfig = {
       type: 'session.update' as const,
       session: {
         type: 'realtime' as const,
         output_modalities: ['audio'] as ('audio' | 'text')[],
-        voice: 'sage' as const,
         instructions: this.getSystemInstructions(),
         tools: this.getToolDefinitions(),
         tool_choice: 'auto' as const,
@@ -415,10 +414,13 @@ Contexto técnico:
         }
       });
       
-      // Solicitar respuesta de la IA
+      // Solicitar respuesta de la IA con voz sage
       this.logger.log('📤 Solicitando respuesta...');
       this.realtimeSession.send({
-        type: 'response.create'
+        type: 'response.create',
+        response: {
+          voice: 'sage' as const,
+        }
       });
     }
   }
@@ -452,10 +454,13 @@ Contexto técnico:
     
     this.conversationActive = false;
     
-    // Crear respuesta para procesar el audio pendiente
+    // Crear respuesta para procesar el audio pendiente con voz sage
     if (this.realtimeSession) {
       this.realtimeSession.send({
-        type: 'response.create'
+        type: 'response.create',
+        response: {
+          voice: 'sage' as const,
+        }
       });
     }
   }
