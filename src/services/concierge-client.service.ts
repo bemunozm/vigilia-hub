@@ -108,7 +108,6 @@ export class ConciergeClientService {
     }
 
     // Configurar sesión usando el SDK con formato GA correcto
-    // Nota: voice se configura en response.create, no en session
     const sessionConfig = {
       type: 'session.update' as const,
       session: {
@@ -117,6 +116,11 @@ export class ConciergeClientService {
         instructions: this.getSystemInstructions(),
         tools: this.getToolDefinitions(),
         tool_choice: 'auto' as const,
+        audio: {
+          output: {
+            voice: 'sage',
+          }
+        }
       }
     };
 
@@ -414,13 +418,10 @@ Contexto técnico:
         }
       });
       
-      // Solicitar respuesta de la IA con voz sage
+      // Solicitar respuesta de la IA
       this.logger.log('📤 Solicitando respuesta...');
       this.realtimeSession.send({
         type: 'response.create',
-        response: {
-          voice: 'sage' as const,
-        }
       });
     }
   }
@@ -454,13 +455,10 @@ Contexto técnico:
     
     this.conversationActive = false;
     
-    // Crear respuesta para procesar el audio pendiente con voz sage
+    // Crear respuesta para procesar el audio pendiente
     if (this.realtimeSession) {
       this.realtimeSession.send({
         type: 'response.create',
-        response: {
-          voice: 'sage' as const,
-        }
       });
     }
   }
