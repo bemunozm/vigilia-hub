@@ -41,7 +41,7 @@ export class Gpio {
         
         this.pigpioGpio = new Pigpio(gpio, {
           mode: mode,
-          pullUpDown: direction === 'in' ? Pigpio.PUD_UP : Pigpio.PUD_OFF
+          pullUpDown: direction === 'in' ? Pigpio.PUD_DOWN : Pigpio.PUD_OFF
         });
 
         // Valor inicial para outputs

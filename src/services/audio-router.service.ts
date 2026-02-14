@@ -24,11 +24,13 @@ export class AudioRouterService {
   private keypadTimeout: NodeJS.Timeout | null = null;
   private cooldownTimeout: NodeJS.Timeout | null = null;
   private scanInterval: NodeJS.Timeout | null = null;
+  private lastSignalTime = 0;
   
   private readonly KEYPAD_TIMEOUT_MS: number;
   private readonly COOLDOWN_MS: number;
   private readonly SCAN_INTERVAL_MS: number;
   private readonly MAX_CONVERSATION_TIME_MS: number;
+  private readonly DEBOUNCE_MS = 2000; // Evitar múltiples disparos
 
   constructor(
     private readonly localCache: LocalCacheService,
@@ -65,10 +67,22 @@ export class AudioRouterService {
    */
   private startKeypadScanning(): void {
     this.scanInterval = setInterval(async () => {
+      // Solo procesar si estamos en TRANSPARENT
+      if (this.state !== AudioState.TRANSPARENT) {
+        return;
+      }
+
       // MODO PRUEBA: En lugar de escanear multiplexor, detectar GPIO 26 directamente
       const signalDetected = this.gpioController.isSignalActive();
       
-      if (signalDetected && this.state === AudioState.TRANSPARENT) {
+      if (signalDetected) {
+        // Debounce: evitar múltiples disparos en 2 segundos
+        const now = Date.now();
+        if (now - this.lastSignalTime < this.DEBOUNCE_MS) {
+          return;
+        }
+        this.lastSignalTime = now;
+
         this.logger.log('🔔 Señal detectada en GPIO 26 - Marcando casa 15 (modo prueba)');
         await this.processHouseNumberDirect('15');
       }
