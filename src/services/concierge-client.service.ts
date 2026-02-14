@@ -431,26 +431,24 @@ Contexto técnico:
     
     this.conversationActive = true;
     
-    // Enviar mensaje inicial contextual usando el SDK
+    // Solicitar respuesta con instrucciones de contexto
+    // IMPORTANTE: No enviar mensaje de texto cuando usamos output_modalities: ['audio']
+    // En su lugar, usar el parámetro 'instructions' en response.create para dar contexto
     if (this.realtimeSession) {
-      this.realtimeSession.send({
-        type: 'conversation.item.create',
-        item: {
-          type: 'message',
-          role: 'user',
-          content: [
-            {
-              type: 'input_text',
-              text: `[Contexto: Llamada desde citófono para casa ${houseNumber}. Saluda al visitante y pregunta su nombre y motivo de visita.]`
-            }
-          ]
-        }
-      });
-      
-      // Solicitar respuesta de la IA
-      this.logger.log('📤 Solicitando respuesta...');
+      this.logger.log('📤 Solicitando respuesta inicial con contexto...');
       this.realtimeSession.send({
         type: 'response.create',
+        response: {
+          // Instrucciones específicas para esta respuesta (sobrescriben las globales momentáneamente)
+          instructions: `Contexto importante: Estás atendiendo una llamada del citófono para la casa número ${houseNumber}. 
+          
+Inicia la conversación saludando brevemente al visitante y pregunta directamente:
+1. Su nombre
+2. Motivo de visita
+3. A qué casa/departamento viene
+
+Sé profesional pero conciso. No des explicaciones largas, ve directo al punto.`,
+        }
       });
     }
   }
