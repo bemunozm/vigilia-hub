@@ -117,6 +117,11 @@ export class ConciergeClientService {
         tools: this.getToolDefinitions(),
         tool_choice: 'auto' as const,
         audio: {
+          input: {
+            transcription: {
+              model: 'whisper-1' as const,
+            }
+          },
           output: {
             voice: 'sage',
           }
@@ -307,8 +312,7 @@ Contexto técnico:
     // Respuesta completa
     this.realtimeSession.on('response.done', (event: any) => {
       this.logger.log(`✅ Respuesta completa: ${event.response?.id}`);
-      this.logger.log('Status Details:', JSON.stringify(event.response?.status_details, null, 2));
-      this.logger.log('Usage:', JSON.stringify(event.response?.usage, null, 2));
+      this.logger.log('Detalles completes de respuesta:', JSON.stringify(event.response, null, 2));
     });
 
     // Transcripción de entrada
@@ -424,9 +428,6 @@ Contexto técnico:
       this.logger.log('📤 Solicitando respuesta...');
       this.realtimeSession.send({
         type: 'response.create',
-        response: {
-          output_modalities: ['audio'],
-        }
       });
     }
   }
@@ -464,9 +465,6 @@ Contexto técnico:
     if (this.realtimeSession) {
       this.realtimeSession.send({
         type: 'response.create',
-        response: {
-          output_modalities: ['audio'],
-        }
       });
     }
   }
