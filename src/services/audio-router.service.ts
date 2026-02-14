@@ -304,6 +304,9 @@ export class AudioRouterService {
    * Configura pipeline bidireccional de audio
    */
   private setupAudioPipeline(): void {
+    // Iniciar reproducción (aplay) explícitamente
+    this.audioManager.startPlayback();
+
     // Captura: Micrófono → Echo Suppression → OpenAI
     this.audioManager.startCapture((audioChunk: Buffer) => {
       // Filtrar eco
