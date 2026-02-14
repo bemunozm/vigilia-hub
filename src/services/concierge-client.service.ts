@@ -152,8 +152,8 @@ export class ConciergeClientService {
               rate: 24000
             },
             transcription: {
-              // Usamos el modelo optimizado para Realtime Mini para asegurar compatibilidad
-              model: 'whisper-1', 
+              // Usamos el modelo de transcripción optimizado para la versión Mini (whisper-1 puede tener rate limits estrictos)
+              model: 'gpt-4o-mini-transcribe-2025-12-15', 
               language: 'es'
             },
             turn_detection: {
