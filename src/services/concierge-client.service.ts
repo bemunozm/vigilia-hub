@@ -17,6 +17,7 @@ export class ConciergeClientService {
   private conversationActive = false;
   private backendUrl: string;
   private audioHandlers: ((audioBuffer: Buffer) => void)[] = [];
+  private audioDoneHandlers: (() => void)[] = [];
   private targetHouse: string | null = null;
   
   // Configuración del modelo Realtime (versión GA estable)
@@ -396,6 +397,7 @@ IMPORTANTE:
       case 'response.audio.done':
       case 'response.output_audio.done':
         this.logger.log('✅ Audio completo recibido');
+        this.audioDoneHandlers.forEach(handler => handler());
         break;
 
       // Transcripción
@@ -630,6 +632,13 @@ REGLAS:
    */
   onAudioReceived(handler: (audioBuffer: Buffer) => void): void {
     this.audioHandlers.push(handler);
+  }
+
+  /**
+   * Registra un handler para cuando finaliza la reproducción de audio
+   */
+  onAudioResponseDone(handler: () => void): void {
+    this.audioDoneHandlers.push(handler);
   }
 
   /**

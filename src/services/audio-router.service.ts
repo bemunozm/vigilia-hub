@@ -325,6 +325,14 @@ export class AudioRouterService {
       // Reproducir
       this.audioManager.writePlayback(audioBuffer);
     });
+
+    // Notificar fin de audio para rehabilitar micrófono
+    this.conciergeClient.onAudioResponseDone(() => {
+      // Pequeño delay para permitir que el buffer de audio (aplay) se vacíe
+      setTimeout(() => {
+        this.echoSuppression.notifySpeakerInactive();
+      }, 500);
+    });
   }
 
   /**
