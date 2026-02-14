@@ -160,16 +160,18 @@ export class AudioManagerService {
    * Mata el proceso actual (limpiando buffer) y reinicia uno nuevo
    */
   interruptPlayback(): void {
-    // Optimización: Solo interrumpir si realmente hay audio reproduciéndose (o en buffer reciente)
-    // Esto evita cortes innecesarios cuando el usuario responde normalmente después de una pausa
-    if (Date.now() > this.audioEndTime) {
-      // El audio ya terminó hace rato (buffer vacío), no hay nada que interrumpir
-      this.logger.debug('🔇 Barge-in ignorado: No hay audio activo');
+    // Optimización: Solo interrumpir si queda audio sustancial por reproducir (>300ms)
+    // Esto evita matar el proceso (y causar delay de reinicio) cuando el usuario responde justo al final (turn-taking natural)
+    const timeRemaining = this.audioEndTime - Date.now();
+    
+    // Si ya terminó o queda menos de 300ms ("silencio final" o cola de audio), ignorar interrupción
+    if (timeRemaining < 300) {
+      // this.logger.debug('🔇 Barge-in ignorado: Audio finalizando o inactivo');
       return;
     }
 
     if (this.playbackProcess) {
-      this.logger.log('🛑 Interrumpiendo reproducción actual (Barge-in)');
+      this.logger.log(`🛑 Interrumpiendo reproducción actual (Barge-in) - Quedaban ${Math.round(timeRemaining)}ms`);
       // Matar proceso forcefuly para vaciar buffer de hardware
       this.playbackProcess.kill('SIGKILL'); 
       this.playbackProcess = null;
