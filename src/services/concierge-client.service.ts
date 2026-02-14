@@ -231,8 +231,9 @@ Contexto técnico:
       }
     });
 
-    this.ws.on('close', () => {
-      this.logger.warn('Conexión a OpenAI cerrada');
+    this.ws.on('close', (code: number, reason: Buffer) => {
+      this.logger.warn(`Conexión a OpenAI cerrada - Código: ${code}, Razón: ${reason.toString()}`);
+      this.conversationActive = false;
     });
   }
 
@@ -267,7 +268,8 @@ Contexto técnico:
         break;
 
       case 'error':
-        this.logger.error('Error de OpenAI:', event.error);
+        this.logger.error('❌ Error de OpenAI:', JSON.stringify(event.error, null, 2));
+        this.logger.error('❌ Evento completo:', JSON.stringify(event, null, 2));
         break;
     }
   }
