@@ -5,13 +5,15 @@ import { Logger } from '../utils/logger';
 import { WebSocketClientService } from './websocket-client.service';
 
 /**
- * Cliente para OpenAI Realtime API usando SDK oficial
+ * Cliente para OpenAI Realtime API usando WebSocket directo
  * Se conecta a través del backend para obtener tokens efímeros
  * 
- * Nota: Aunque el SDK oficial de OpenAI no tiene soporte completo para
- * Realtime API con streaming de audio personalizado en Node.js (esa funcionalidad
- * está en @openai/agents/realtime que es solo para navegadores), usamos el SDK
- * para validación de tokens, configuración del cliente, y manejo de errores robusto.
+ * Implementación: WebSocket manual (método oficial para Node.js server-to-server)
+ * Referencia: https://developers.openai.com/api/docs/guides/realtime-websocket
+ * 
+ * Nota: @openai/agents/realtime es solo para navegadores (WebRTC).
+ * El SDK openai@4.x no tiene soporte completo para Realtime API WebSocket,
+ * por eso usamos WebSocket manual como indica la documentación oficial.
  */
 export class ConciergeClientService {
   private readonly logger = new Logger(ConciergeClientService.name);
@@ -36,7 +38,7 @@ export class ConciergeClientService {
     }
 
     this.backendUrl = backendUrl;
-    this.logger.log('✅ Concierge Client inicializado (SDK oficial OpenAI)');
+    this.logger.log('✅ Concierge Client inicializado (WebSocket directo)');
     this.logger.log(`📡 Backend URL: ${this.backendUrl}`);
     this.logger.log(`🤖 Modelo: ${this.REALTIME_MODEL}`);
   }
@@ -108,30 +110,39 @@ export class ConciergeClientService {
       return;
     }
 
-    // Configuración de sesión siguiendo las mejores prácticas del SDK
+    // Configuración de sesión GA según documentación oficial
+    // https://developers.openai.com/api/docs/guides/realtime-conversations#session-lifecycle-events
     const sessionConfig = {
       type: 'session.update',
       session: {
-        type: 'realtime', // Requerido en GA API
-        modalities: ['audio'], // Solo audio (no text) para citófono
+        type: 'realtime',
+        model: 'gpt-realtime',
+        output_modalities: ['audio'], // Solo audio (no text) para citófono
+        audio: {
+          input: {
+            format: {
+              type: 'audio/pcm',
+              rate: 24000, // 24kHz según nuestra configuración
+            },
+            turn_detection: {
+              type: 'semantic_vad', // VAD semántico (GA)
+              threshold: 0.5,
+              prefix_padding_ms: 300,
+              silence_duration_ms: 500,
+            },
+          },
+          output: {
+            format: {
+              type: 'audio/pcm',
+            },
+            voice: 'sage', // Voz consistente con frontend
+          },
+        },
         instructions: this.getSystemInstructions(),
-        voice: 'sage', // Voz consistente con el frontend
-        input_audio_format: 'pcm16',
-        output_audio_format: 'pcm16',
-        input_audio_transcription: {
-          model: 'whisper-1',
-          language: 'es', // Español para mejor precisión
-        },
-        turn_detection: {
-          type: 'server_vad',
-          threshold: 0.5,
-          prefix_padding_ms: 300,
-          silence_duration_ms: 500
-        },
         tools: this.getToolDefinitions(),
         tool_choice: 'auto',
         temperature: 0.8,
-        max_response_output_tokens: 4096
+        max_response_output_tokens: 4096,
       }
     };
 
