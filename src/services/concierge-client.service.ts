@@ -398,7 +398,11 @@ IMPORTANTE:
 
       // Errores
       case 'error':
-        this.logger.error('❌ Error de OpenAI:', JSON.stringify(event.error, null, 2));
+        // Log detallado de CUALQUIER error
+        this.logger.error('❌ Error de OpenAI (Detalle Completo):', JSON.stringify(event, null, 2));
+        if (event.error?.code) {
+             this.logger.error(`Error Code: ${event.error.code} - Message: ${event.error.message}`);
+        }
         break;
 
       default:
