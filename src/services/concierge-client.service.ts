@@ -114,8 +114,8 @@ export class ConciergeClientService {
     const sessionConfig = {
       type: 'session.update',
       session: {
-        // Modalidades de salida (solo audio)
-        output_modalities: ['audio'],
+        // Modalidades requeridas: Audio para voz, Texto para function calling
+        modalities: ['text', 'audio'],
         
         // Instrucciones del sistema
         instructions: this.getSystemInstructions(),
@@ -130,9 +130,9 @@ export class ConciergeClientService {
               rate: 24000
             },
             
-            // Transcripción opcional con modelo actualizado
+            // Transcripción opcional (usando whisper-1 por compatibilidad garantizada)
             transcription: {
-              model: 'gpt-4o-mini-transcribe',
+              model: 'whisper-1',
               language: 'es'
             },
             
@@ -413,7 +413,7 @@ IMPORTANTE:
 
       // Errores
       case 'error':
-        this.logger.error('❌ Error de OpenAI:', event.error);
+        this.logger.error('❌ Error de OpenAI:', JSON.stringify(event.error, null, 2));
         break;
 
       default:
