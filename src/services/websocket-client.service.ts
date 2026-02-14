@@ -134,11 +134,10 @@ export class WebSocketClientService {
       this.logger.log(`🔧 Ejecutando tool: ${toolName}`);
       
       const response = await axios.post(
-        `${this.backendUrl}/digital-concierge/tools/execute`,
+        `${this.backendUrl}/concierge/session/${sessionId}/execute-tool`,
         {
-          sessionId,
           toolName,
-          toolArgs
+          parameters: toolArgs
         },
         {
           headers: {

@@ -466,11 +466,31 @@ IMPORTANTE:
     this.logger.log(`🔧 Tool call: ${name}(${JSON.stringify(args)})`);
 
     try {
-      const result = await this.websocketClient.executeTool(
-        name,
-        args,
-        this.currentSessionId || 'unknown'
-      );
+      let result: any;
+
+      if (name === 'finalizar_llamada') {
+        // Manejo local para finalizar_llamada
+        this.logger.log('📞 Ejecutando tool local: finalizar_llamada');
+        
+        // Simular delay y desconexión
+        setTimeout(() => {
+          this.endConversation();
+          // Opcional: desconectar completamente
+          // this.disconnect(); 
+        }, 4000); // 4 segundos para permitir despedida
+
+        result = {
+          finalizada: true,
+          mensaje: 'OK. La llamada se cerrará automáticamente.'
+        };
+      } else {
+        // Ejecutar tool en backend
+        result = await this.websocketClient.executeTool(
+          name,
+          args,
+          this.currentSessionId || 'unknown'
+        );
+      }
 
       // Enviar resultado de la herramienta
       this.sendEvent({
