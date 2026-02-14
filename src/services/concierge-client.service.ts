@@ -20,6 +20,7 @@ export class ConciergeClientService {
   private audioDoneHandlers: (() => void)[] = [];
   private speechStartedHandlers: (() => void)[] = [];
   private targetHouse: string | null = null;
+  private isInterrupted = false;
   
   // Configuración del modelo Realtime (versión GA estable)
   private readonly REALTIME_MODEL = 'gpt-realtime-mini-2025-12-15';
@@ -346,6 +347,7 @@ export class ConciergeClientService {
       // Respuestas
       case 'response.created':
         this.logger.log(`🎬 Respuesta iniciada: ${event.response?.id}`);
+        this.isInterrupted = false; // Nueva respuesta, resetear flag
         break;
 
       case 'response.done':
@@ -368,6 +370,10 @@ export class ConciergeClientService {
       // Audio
       case 'response.audio.delta':
       case 'response.output_audio.delta':
+        if (this.isInterrupted) {
+          // Ignorar audio si el usuario interrumpió
+          return;
+        }
         this.logger.debug('🔊 Audio delta recibido');
         if (event.delta) {
           const audioBuffer = Buffer.from(event.delta, 'base64');
@@ -394,11 +400,15 @@ export class ConciergeClientService {
       // VAD
       case 'input_audio_buffer.speech_started':
         this.logger.log('🎙️ Detectado inicio de habla del usuario');
-        // Notificar listeners para interrupción (barge-in)
+        
+        // Marcar como interrumpido para detener el flujo de audio localmente
+        this.isInterrupted = true;
+        
+        // Notificar listeners para interrupción (barge-in) -> Mata el proceso de audio
         this.speechStartedHandlers.forEach(handler => handler());
         
-        // Opcional: Cancelar respuesta actual en el servidor si no lo hace automático
-        // this.sendEvent({ type: 'response.cancel' }); 
+        // Cancelar respuesta actual en el servidor para ahorrar tokens y ancho de banda
+        this.sendEvent({ type: 'response.cancel' }); 
         break;
 
       case 'input_audio_buffer.speech_stopped':

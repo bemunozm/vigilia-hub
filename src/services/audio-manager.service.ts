@@ -165,8 +165,16 @@ export class AudioManagerService {
    * Escribe datos de audio al proceso de playback
    */
   writePlayback(audioData: Buffer): void {
-    if (this.playbackProcess?.stdin?.writable) {
-      this.playbackProcess.stdin.write(audioData);
+    try {
+      if (this.playbackProcess?.stdin?.writable) {
+        this.playbackProcess.stdin.write(audioData, (error) => {
+          if (error) {
+            this.logger.debug(`Error escribiendo audio (callback): ${error.message}`);
+          }
+        });
+      }
+    } catch (error) {
+      this.logger.debug(`Excepción escribiendo audio: ${error instanceof Error ? error.message : 'Unknown'}`);
     }
   }
 
