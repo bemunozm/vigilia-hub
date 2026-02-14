@@ -133,8 +133,8 @@ export class ConciergeClientService {
         instructions: this.getSystemInstructions(),
         // voice: 'sage', // CAUSA ERROR: Unknown parameter: 'session.voice'
         
-        input_audio_format: 'pcm16',
-        output_audio_format: 'pcm16',
+        // input_audio_format: 'pcm16', // CAUSA ERROR: Unknown parameter: 'session.input_audio_format'
+        // output_audio_format: 'pcm16', // Se asumen pcm16 por defecto en este modelo
         
         input_audio_transcription: {
            model: 'whisper-1' 
