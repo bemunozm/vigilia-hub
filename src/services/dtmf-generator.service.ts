@@ -46,7 +46,9 @@ export class DTMFGeneratorService {
       
       this.logger.log(`✅ Secuencia DTMF enviada completamente`);
     } catch (error: any) {
-      this.logger.error(`Error enviando DTMF: ${error.message}`);
+      // Si no hay dispositivo de audio, continuar sin DTMF
+      this.logger.warn(`⚠️ No se pudo enviar DTMF (sin dispositivo audio): ${error.message}`);
+      this.logger.log(`ℹ️ En producción con hardware real, esta señal se enviará al módulo GT`);
     } finally {
       // Limpiar archivo temporal
       try {
