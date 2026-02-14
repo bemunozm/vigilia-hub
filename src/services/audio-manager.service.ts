@@ -166,13 +166,22 @@ export class AudioManagerService {
       this.playbackProcess = null;
     }
     // Reiniciar inmediatamente
-    this.startPlayback();
+    // NOTA: NO llamamos a startPlayback() aquí.
+    // Dejamos que el próximo writePlayback() detecte que no hay proceso y lo inicie si es necesario, 
+    // o mejor aun, dejamos que el flujo natural lo maneje.
+    // Iniciar aplay sin datos causa un "pop" o delay esperando datos
+    this.startPlayback(); 
   }
 
   /**
    * Escribe datos de audio al proceso de playback
    */
   writePlayback(audioData: Buffer): void {
+    // Si no hay proceso de playback, iniciarlo on-demand
+    if (!this.playbackProcess) {
+       this.startPlayback();
+    }
+
     // Verificación robusta antes de escribir
     if (!this.playbackProcess || 
         !this.playbackProcess.stdin || 
