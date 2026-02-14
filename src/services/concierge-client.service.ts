@@ -131,6 +131,7 @@ export class ConciergeClientService {
           output: {
             format: {
               type: 'audio/pcm',
+              rate: 24000, // Requerido: mismo rate que input
             },
             voice: 'sage', // Voz consistente con frontend
           },
