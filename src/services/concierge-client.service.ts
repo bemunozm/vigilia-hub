@@ -1,26 +1,27 @@
-import OpenAI from 'openai';
-import { OpenAIRealtimeWS } from 'openai/realtime/ws';
+import WebSocket from 'ws';
 import axios from 'axios';
 import { Logger } from '../utils/logger';
 import { WebSocketClientService } from './websocket-client.service';
 
 /**
- * Cliente para OpenAI Realtime API usando SDK oficial
- * Se conecta a través del backend para obtener tokens efímeros
+ * Cliente para OpenAI Realtime API usando WebSocket directo
+ * Réplica exacta del flujo del frontend (DigitalConciergeView.tsx)
  * 
- * Implementación: OpenAIRealtimeWS (SDK oficial para Node.js server-to-server)
- * Referencia: https://github.com/openai/openai-node/blob/main/realtime.md
+ * Implementación: WebSocket nativo (ws library)
+ * Referencia: https://platform.openai.com/docs/api-reference/realtime
  */
 export class ConciergeClientService {
   private readonly logger = new Logger(ConciergeClientService.name);
-  private realtimeSession: OpenAIRealtimeWS | null = null;
+  private ws: WebSocket | null = null;
   private currentSessionId: string | null = null;
   private conversationActive = false;
   private backendUrl: string;
   private audioHandlers: ((audioBuffer: Buffer) => void)[] = [];
+  private targetHouse: string | null = null;
   
-  // Configuración del modelo Realtime GA
-  private readonly REALTIME_MODEL = 'gpt-realtime';
+  // Configuración del modelo Realtime
+  private readonly REALTIME_MODEL = 'gpt-realtime-mini';
+  private readonly REALTIME_WS_URL = 'wss://api.openai.com/v1/realtime';
 
   constructor(
     private readonly websocketClient: WebSocketClientService
@@ -32,13 +33,13 @@ export class ConciergeClientService {
     }
 
     this.backendUrl = backendUrl;
-    this.logger.log('✅ Concierge Client inicializado (SDK oficial)');
+    this.logger.log('✅ Concierge Client inicializado (WebSocket nativo)');
     this.logger.log(`📡 Backend URL: ${this.backendUrl}`);
     this.logger.log(`🤖 Modelo: ${this.REALTIME_MODEL}`);
   }
 
   /**
-   * Conecta a OpenAI Realtime API usando token efímero del backend
+   * Conecta a OpenAI Realtime API usando WebSocket directo
    */
   async connect(): Promise<void> {
     try {
@@ -54,17 +55,18 @@ export class ConciergeClientService {
 
       this.logger.log(`✅ Token efímero obtenido. SessionId: ${sessionId}`);
       
-      this.logger.log('🤖 Conectando a OpenAI Realtime API...');
+      this.logger.log('🤖 Conectando a OpenAI Realtime API via WebSocket...');
 
-      // Crear cliente OpenAI con token efímero
-      const client = new OpenAI({
-        apiKey: ephemeralToken,
+      // Construir URL con modelo y headers según documentación OpenAI
+      const wsUrl = `${this.REALTIME_WS_URL}?model=${this.REALTIME_MODEL}`;
+      
+      // Crear WebSocket con headers de autorización
+      this.ws = new WebSocket(wsUrl, {
+        headers: {
+          'Authorization': `Bearer ${ephemeralToken}`,
+          'OpenAI-Beta': 'realtime=v1'
+        }
       });
-
-      // Crear sesión Realtime usando el SDK oficial
-      this.realtimeSession = new OpenAIRealtimeWS({
-        model: this.REALTIME_MODEL
-      }, client);
 
       // Configurar event handlers
       this.setupEventHandlers();
@@ -75,14 +77,14 @@ export class ConciergeClientService {
           reject(new Error('Timeout esperando conexión WebSocket'));
         }, 10000);
 
-        this.realtimeSession!.socket.on('open', () => {
+        this.ws!.on('open', () => {
           clearTimeout(timeout);
-          this.logger.log('✅ Conectado a OpenAI Realtime API');
+          this.logger.log('✅ WebSocket conectado a OpenAI Realtime API');
           this.configureSession();
           resolve();
         });
 
-        this.realtimeSession!.socket.on('error', (error: Error) => {
+        this.ws!.on('error', (error: Error) => {
           clearTimeout(timeout);
           this.logger.error('❌ Error en WebSocket de OpenAI:', error);
           reject(error);
@@ -100,274 +102,406 @@ export class ConciergeClientService {
 
   /**
    * Configura la sesión de OpenAI con parámetros optimizados
+   * Estructura según documentación oficial de OpenAI Realtime API
    */
   private configureSession(): void {
-    if (!this.realtimeSession) {
-      this.logger.error('❌ No hay sesión Realtime para configurar');
+    if (!this.ws) {
+      this.logger.error('❌ No hay WebSocket para configurar');
       return;
     }
 
-    // Configurar sesión usando el SDK oficial (Estructura Anidada según definiciones de RealtimeSessionCreateRequest en realtime.d.ts)
+    // Configuración de sesión según documentación oficial
+    // https://platform.openai.com/docs/api-reference/realtime
     const sessionConfig = {
-      type: 'session.update' as const,
+      type: 'session.update',
       session: {
-        // Requerido por la definición RealtimeSessionCreateRequest
-        type: 'realtime' as const,
+        // Modalidades de salida (solo audio)
+        output_modalities: ['audio'],
         
-        // Modalidades de salida (solo audio, no se puede combinar con text)
-        output_modalities: ['audio'] as ('audio' | 'text')[],
-        
+        // Instrucciones del sistema
         instructions: this.getSystemInstructions(),
-        tools: this.getToolDefinitions(),
-        tool_choice: 'auto' as const,
         
-        // Configuración de Audio (Estructura anidada para session.update)
+        // Configuración de audio (estructura anidada según RealtimeAudioConfig)
         audio: {
+          // Input: audio del usuario
           input: {
-            // Formato de audio de entrada PCM 24kHz (estructura de objeto requerida por GA API)
-            format: {
-              type: 'audio/pcm' as const,
-              rate: 24000 as const
+            // Formato PCM16 (24kHz es el único samplerate soportado)
+            format: 'pcm16',
+            
+            // Transcripción opcional
+            transcription: {
+              model: 'whisper-1',
+              language: 'es'
             },
-            // NOTA: Transcripción deshabilitada temporalmente - el modelo procesa audio directamente
-            // transcription: {
-            //   model: 'whisper-1' as const,
-            // },
-            // VAD (Server VAD) para detección automática de turnos
+            
+            // Server VAD para detección automática de turnos
             turn_detection: {
-              type: 'server_vad' as const,
+              type: 'server_vad',
               threshold: 0.5,
               prefix_padding_ms: 300,
               silence_duration_ms: 500
             }
           },
+          
+          // Output: audio del asistente
           output: {
-            // Formato de audio de salida PCM 24kHz
-            format: {
-              type: 'audio/pcm' as const,
-              rate: 24000 as const
-            },
-            voice: 'sage',
+            format: 'pcm16',
+            voice: 'sage'
           }
-        }
+        },
+        
+        // Herramientas disponibles
+        tools: this.getToolDefinitions(),
+        tool_choice: 'auto'
       }
     };
 
-    this.logger.log('📤 Enviando configuración:', JSON.stringify(sessionConfig, null, 2));
-    this.realtimeSession.send(sessionConfig);
+    this.logger.log('📤 Enviando configuración de sesión:', JSON.stringify(sessionConfig, null, 2));
+    this.sendEvent(sessionConfig);
 
     this.logger.log('📋 Sesión de OpenAI configurada exitosamente');
   }
 
   /**
    * Instrucciones del sistema para el Conserje Digital
+   * Réplica exacta del frontend
    */
   private getSystemInstructions(): string {
-    return `Eres el Conserje Digital de Vigilia, un sistema de seguridad residencial.
+    if (!this.targetHouse) {
+      return `Eres Sofía, la conserje del Condominio San Lorenzo. Eres amable, cálida y conversacional.
+Tu trabajo es ayudar a los visitantes a ingresar al condominio de manera eficiente pero siempre con una sonrisa en la voz.
 
-Tu rol es:
-1. Atender llamadas desde el citófono de entrada del condominio
-2. Identificar al visitante preguntando por su nombre y motivo de visita
-3. Consultar a qué departamento/casa desea ir
-4. Usar las herramientas disponibles para:
-   - Buscar el número de departamento si el visitante dice "voy donde María"
-   - Notificar al residente sobre la visita
-   - Abrir la puerta SOLO si el residente autoriza
+PERSONALIDAD:
+- Habla de manera natural y amigable, como si conversaras con un vecino
+- Usa expresiones chilenas cotidianas: "¿Cómo estás?", "Perfecto", "Genial", "Súper"
+- Sé paciente y empática, especialmente si el visitante parece confundido
+- Haz que la conversación fluya naturalmente, no como un formulario robótico
 
-Comportamiento:
-- Sé educado, profesional y conciso
-- Si no tienes autorización, NO abras la puerta
-- Si hay un problema técnico, pide al visitante que intente nuevamente o contacte al residente por otro medio
-- Siempre confirma con el residente antes de abrir
+Estás esperando que el visitante marque el número de casa/departamento de destino.`;
+    }
 
-Contexto técnico:
-- Trabajas con audio de 24kHz mono PCM16
-- Las respuestas de herramientas vienen del backend NestJS
-- Eres la primera línea de seguridad del edificio`;
+    return `Eres Sofía, la conserje del Condominio San Lorenzo. Eres amable, cálida y conversacional. Tu trabajo es ayudar a los visitantes a ingresar al condominio de manera eficiente pero siempre con una sonrisa en la voz.
+
+INFORMACIÓN INICIAL:
+- El visitante ya marcó la casa de destino: ${this.targetHouse}
+- YA conoces a dónde va, NO preguntes por la casa/departamento nuevamente
+
+PERSONALIDAD:
+- Habla de manera natural y amigable, como si conversaras con un vecino
+- Usa expresiones chilenas cotidianas: "¿Cómo estás?", "Perfecto", "Genial", "Súper"
+- Sé paciente y empática, especialmente si el visitante parece confundido
+- Haz que la conversación fluya naturalmente, no como un formulario robótico
+
+FLUJO DE CONVERSACIÓN (SIGUE ESTE ORDEN ESTRICTAMENTE):
+
+1. SALUDO INICIAL (di esto EXACTAMENTE una sola vez):
+   "¡Hola! Bienvenido al Condominio San Lorenzo. Mi nombre es Sofía y soy la conserje. Veo que deseas visitar la casa ${this.targetHouse}. ¿Cómo te llamas?"
+
+2. RECOPILACIÓN DE DATOS (UNO POR UNO, en este orden):
+   
+   a) Nombre:
+      - Espera la respuesta
+      - Guarda con guardar_datos_visitante(nombre: "...")
+      - Di: "Encantada [nombre]. ¿Me podrías dar tu RUT o pasaporte por favor?"
+   
+   b) RUT/Pasaporte:
+      - Espera la respuesta
+      - Guarda con guardar_datos_visitante(rut: "...")
+      - Si el sistema responde con error (RUT inválido):
+        * Di amablemente: "Disculpa, el RUT que escuché no parece ser válido. ¿Me lo podrías repetir por favor? Dilo dígito por dígito si es necesario."
+        * Vuelve a intentar guardar el RUT
+      - Si se guarda correctamente, di: "Perfecto. ¿Y un número de teléfono de contacto?"
+   
+   c) Teléfono:
+      - Espera la respuesta
+      - Guarda con guardar_datos_visitante(telefono: "...")
+      - Di: "Genial. ¿Vienes en vehículo?"
+   
+   d) Vehículo (PREGUNTA PRIMERO):
+      - Si dice SÍ: "¿Me podrías decir la patente del vehículo?"
+        * Espera la respuesta
+        * Guarda con guardar_datos_visitante(patente: "...")
+      - Si dice NO: "Vale, sin problema."
+        * NO preguntes por patente
+        * NO llames a guardar_datos_visitante con el campo patente
+        * Simplemente omite este dato y continúa
+      - Luego di: "¿Cuál es el motivo de tu visita?"
+   
+   e) Motivo:
+      - Espera la respuesta
+      - Guarda con guardar_datos_visitante(motivo: "...")
+      - Di: "Excelente, déjame buscar al residente."
+
+3. BÚSQUEDA Y NOTIFICACIÓN:
+   - Llama buscar_residente(casa: "${this.targetHouse}")
+   - Si encuentra residentes:
+     * El sistema devuelve un array "residentes" con TODOS los miembros de la familia
+     * Extrae los IDs de TODOS los residentes del array
+     * Llama notificar_residente(residentes_ids: ["id1", "id2", ...]) con TODOS los IDs
+     * IMPORTANTE: Al llamar notificar_residente, la visita se crea AUTOMÁTICAMENTE en estado pendiente
+     * Si hay múltiples residentes, di: "Perfecto, le he enviado una notificación a todos los residentes de la casa. Estoy esperando su respuesta."
+     * Si hay un solo residente, di: "Perfecto, le he enviado una notificación a [nombre del residente]. Estoy esperando su respuesta."
+   - Si NO encuentra:
+     * Di: "Lo siento, no encuentro registrado a ningún residente en la casa ${this.targetHouse}. ¿Estás seguro del número?"
+
+4. ESPERA DE RESPUESTA:
+   - Después de decir que estás esperando, NO digas NADA más
+   - NO menciones palabras como "silencio", "espera en silencio", etc.
+   - Simplemente DETENTE y espera
+   - El SISTEMA te enviará automáticamente un mensaje cuando el residente responda
+
+5. RESPUESTA DEL RESIDENTE (cuando recibas la notificación del sistema):
+   - Si APROBÓ:
+     * La visita YA FUE CREADA y ahora está ACTIVA automáticamente
+     * NO necesitas llamar ninguna herramienta adicional
+     * Di con entusiasmo: "¡Buenas noticias [nombre]! El residente ha aprobado tu visita. Puedes ingresar al condominio. ¡Que tengas un excelente día!"
+     * INMEDIATAMENTE después de este mensaje, llama finalizar_llamada()
+   - Si RECHAZÓ:
+     * La visita fue automáticamente marcada como RECHAZADA
+     * NO necesitas llamar ninguna herramienta adicional
+     * Di con empatía: "Lo lamento [nombre], pero el residente no puede recibirte en este momento. Te sugiero contactarlo directamente. Que tengas buen día."
+     * INMEDIATAMENTE después de este mensaje, llama finalizar_llamada()
+
+IMPORTANTE: Después de dar el mensaje de aprobación o rechazo, DEBES llamar a finalizar_llamada() sin decir nada más. No esperes respuesta del visitante.
+
+REGLAS IMPORTANTES:
+- NO te saltes pasos del flujo
+- NO repitas preguntas que ya hiciste
+- Espera la respuesta del visitante antes de continuar
+- Guarda cada dato INMEDIATAMENTE después de recibirlo
+- SIEMPRE incluye casa: "${this.targetHouse}" al guardar datos
+- NO inventes respuestas del residente
+- Después de notificar, espera EN SILENCIO (no digas que estás en silencio)
+- Acepta datos en cualquier formato (el sistema los formatea automáticamente)`;
   }
 
   /**
    * Define las herramientas disponibles
+   * Réplica exacta del frontend
    */
   private getToolDefinitions(): any[] {
     return [
       {
         type: 'function',
-        name: 'searchResidentByName',
-        description: 'Busca residentes por nombre cuando el visitante dice "voy donde Juan"',
+        name: 'guardar_datos_visitante',
+        description: 'Guarda y formatea automáticamente los datos del visitante. El RUT se formatea a XX.XXX.XXX-X, el teléfono se limpia de caracteres especiales, y la patente se normaliza a mayúsculas.',
         parameters: {
           type: 'object',
           properties: {
-            name: {
+            nombre: {
               type: 'string',
-              description: 'Nombre del residente a buscar'
-            }
-          },
-          required: ['name']
-        }
-      },
-      {
-        type: 'function',
-        name: 'notifyResident',
-        description: 'Notifica al residente que tiene una visita en el citófono',
-        parameters: {
-          type: 'object',
-          properties: {
-            unitId: {
-              type: 'string',
-              description: 'ID del departamento/casa'
+              description: 'Nombre completo del visitante tal como lo dijo'
             },
-            visitorName: {
+            rut: {
               type: 'string',
-              description: 'Nombre del visitante'
+              description: 'RUT o pasaporte del visitante en cualquier formato (números, con/sin puntos o guión)'
             },
-            reason: {
+            telefono: {
+              type: 'string',
+              description: 'Teléfono del visitante en cualquier formato'
+            },
+            patente: {
+              type: 'string',
+              description: 'Patente del vehículo en cualquier formato'
+            },
+            motivo: {
               type: 'string',
               description: 'Motivo de la visita'
-            }
-          },
-          required: ['unitId', 'visitorName']
-        }
-      },
-      {
-        type: 'function',
-        name: 'checkAuthorization',
-        description: 'Verifica si el residente autorizó la entrada del visitante',
-        parameters: {
-          type: 'object',
-          properties: {
-            notificationId: {
-              type: 'string',
-              description: 'ID de la notificación enviada'
-            }
-          },
-          required: ['notificationId']
-        }
-      },
-      {
-        type: 'function',
-        name: 'openDoor',
-        description: 'Abre la puerta de entrada. SOLO usar si hay autorización',
-        parameters: {
-          type: 'object',
-          properties: {
-            unitId: {
-              type: 'string',
-              description: 'ID del departamento que autorizó'
             },
-            reason: {
+            casa: {
               type: 'string',
-              description: 'Razón de la apertura'
+              description: 'Número de casa/departamento de destino'
+            }
+          }
+        }
+      },
+      {
+        type: 'function',
+        name: 'buscar_residente',
+        description: 'Busca un residente por número o código de casa/departamento. Acepta múltiples formatos: números solos ("15"), con prefijos ("Casa 15"), o códigos alfanuméricos ("A-1234", "B-201"). Devuelve TODOS los residentes de la familia.',
+        parameters: {
+          type: 'object',
+          properties: {
+            casa: {
+              type: 'string',
+              description: 'Número, código o nombre de casa/departamento tal como lo dijo el visitante'
             }
           },
-          required: ['unitId', 'reason']
+          required: ['casa']
+        }
+      },
+      {
+        type: 'function',
+        name: 'notificar_residente',
+        description: 'Envía una notificación push a TODOS los residentes de la familia para que aprueben o rechacen la visita',
+        parameters: {
+          type: 'object',
+          properties: {
+            residentes_ids: {
+              type: 'array',
+              items: {
+                type: 'string'
+              },
+              description: 'Array con los IDs de TODOS los residentes a notificar (todos los miembros de la familia)'
+            }
+          },
+          required: ['residentes_ids']
+        }
+      },
+      {
+        type: 'function',
+        name: 'finalizar_llamada',
+        description: 'Finaliza la llamada con el visitante. Usa esta herramienta SOLO después de despedirte completamente. NO menciones que estás finalizando la llamada, solo despídete naturalmente.',
+        parameters: {
+          type: 'object',
+          properties: {}
         }
       }
     ];
   }
 
   /**
-   * Event handlers usando SDK de OpenAI
+   * Método auxiliar para enviar eventos al WebSocket
+   */
+  private sendEvent(event: any): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      this.logger.error('❌ WebSocket no está abierto, no se puede enviar evento');
+      return;
+    }
+
+    const eventString = JSON.stringify(event);
+    this.ws.send(eventString);
+  }
+
+  /**
+   * Event handlers para WebSocket directo
+   * Réplica exacta del frontend
    */
   private setupEventHandlers(): void {
-    if (!this.realtimeSession) return;
+    if (!this.ws) return;
 
-    // IMPORTANTE: Capturar TODOS los eventos para debugging
-    this.realtimeSession.on('event', (event: any) => {
-      if (!event.type.includes('delta') && !event.type.includes('input_audio_buffer')) {
-        this.logger.log(`📥 Evento: ${event.type}`, JSON.stringify(event, null, 2));
+    // Mensaje recibido del WebSocket
+    this.ws.on('message', (data: WebSocket.Data) => {
+      try {
+        const event = JSON.parse(data.toString());
+        this.handleRealtimeEvent(event);
+      } catch (error) {
+        this.logger.error('❌ Error parseando mensaje de WebSocket:', error);
       }
     });
 
-    // Handler de errores (MUY IMPORTANTE)
-    this.realtimeSession.on('error', (error: any) => {
-      this.logger.error('❌ Error de OpenAI:', error);
-    });
-
-    // Sesión creada
-    this.realtimeSession.on('session.created', (event: any) => {
-      this.currentSessionId = event.session.id;
-      this.logger.log(`📝 Sesión creada: ${this.currentSessionId}`);
-    });
-
-    // Sesión actualizada
-    this.realtimeSession.on('session.updated', (event: any) => {
-      this.logger.log('✅ Sesión actualizada correctamente');
-      this.logger.log('Configuración:', JSON.stringify(event.session, null, 2));
-    });
-
-    // Respuesta iniciada
-    this.realtimeSession.on('response.created', (event: any) => {
-      this.logger.log(`🎬 Respuesta iniciada: ${event.response?.id}`);
-      this.logger.log('Respuesta:', JSON.stringify(event.response, null, 2));
-    });
-
-    // Item agregado
-    this.realtimeSession.on('response.content_part.added', (event: any) => {
-      this.logger.log(`📝 Content part agregado: ${event.part?.type}`);
-      this.logger.log('Part:', JSON.stringify(event.part, null, 2));
-    });
-
-    // Output item agregado
-    this.realtimeSession.on('response.output_item.added', (event: any) => {
-      this.logger.log(`📝 Output item agregado: ${event.item?.type}`);
-      this.logger.log('Item:', JSON.stringify(event.item, null, 2));
-    });
-
-    // Output item completado
-    this.realtimeSession.on('response.output_item.done', (event: any) => {
-      this.logger.log(`✅ Output item completado: ${event.item?.type}`);
-    });
-
-    // Evento de audio delta (chunks de audio PCM)
-    this.realtimeSession.on('response.output_audio.delta', (event: any) => {
-      this.logger.log('🔊 Audio delta recibido');
-      if (event.delta) {
-        const audioBuffer = Buffer.from(event.delta, 'base64');
-        this.audioHandlers.forEach(handler => handler(audioBuffer));
-      }
-    });
-
-    // Audio completado
-    this.realtimeSession.on('response.output_audio.done', () => {
-      this.logger.log('✅ Audio completo recibido');
-    });
-
-    // Respuesta completa
-    this.realtimeSession.on('response.done', (event: any) => {
-      this.logger.log(`✅ Respuesta completa: ${event.response?.id}`);
-      this.logger.log('Detalles completes de respuesta:', JSON.stringify(event.response, null, 2));
-    });
-
-    // Transcripción de entrada
-    this.realtimeSession.on('conversation.item.input_audio_transcription.completed', (event: any) => {
-      this.logger.log(`👤 Usuario: ${event.transcript}`);
-    });
-
-    // Texto de respuesta
-    this.realtimeSession.on('response.output_text.delta', (event: any) => {
-      this.logger.debug(`🤖 Asistente (texto): ${event.delta}`);
-    });
-
-    // Tool calls
-    this.realtimeSession.on('response.function_call_arguments.done', async (event: any) => {
-      await this.handleToolCall(event);
-    });
-
-    // VAD eventos
-    this.realtimeSession.on('input_audio_buffer.speech_started', () => {
-      this.logger.log('🎙️ Detectado inicio de habla del usuario');
-    });
-
-    this.realtimeSession.on('input_audio_buffer.speech_stopped', () => {
-      this.logger.log('🎙️ Detectado fin de habla del usuario');
-    });
-
-    // Cierre de conexión
-    this.realtimeSession.socket.on('close', (code: number, reason: Buffer) => {
-      this.logger.warn(`Conexión a OpenAI cerrada - Código: ${code}, Razón: ${reason.toString()}`);
+    // WebSocket cerrado
+    this.ws.on('close', (code: number, reason: Buffer) => {
+      this.logger.warn(`❌ Conexión a OpenAI cerrada - Código: ${code}, Razón: ${reason.toString()}`);
       this.conversationActive = false;
     });
+
+    // Error en WebSocket
+    this.ws.on('error', (error: Error) => {
+      this.logger.error('❌ Error en WebSocket:', error);
+    });
+  }
+
+  /**
+   * Maneja eventos de la Realtime API
+   */
+  private handleRealtimeEvent(event: any): void {
+    const { type } = event;
+
+    // Filtrar eventos ruidosos (deltas)
+    if (!type.includes('delta') && !type.includes('input_audio_buffer')) {
+      this.logger.log(`📥 Evento: ${type}`, JSON.stringify(event, null, 2));
+    }
+
+    switch (type) {
+      // Sesión
+      case 'session.created':
+        this.logger.log(`✅ Sesión creada: ${event.session?.id}`);
+        break;
+
+      case 'session.updated':
+        this.logger.log('✅ Sesión actualizada correctamente');
+        break;
+
+      // Respuestas
+      case 'response.created':
+        this.logger.log(`🎬 Respuesta iniciada: ${event.response?.id}`);
+        break;
+
+      case 'response.done':
+        this.logger.log(`✅ Respuesta completa: ${event.response?.id}`);
+        this.logger.log('Detalles:', JSON.stringify(event.response, null, 2));
+        break;
+
+      case 'response.content_part.added':
+        this.logger.log(`📝 Content part agregado: ${event.part?.type}`);
+        break;
+
+      case 'response.output_item.added':
+        this.logger.log(`📝 Output item agregado: ${event.item?.type}`);
+        break;
+
+      case 'response.output_item.done':
+        this.logger.log(`✅ Output item completado: ${event.item?.type}`);
+        break;
+
+      // Audio
+      case 'response.audio.delta':
+      case 'response.output_audio.delta':
+        this.logger.debug('🔊 Audio delta recibido');
+        if (event.delta) {
+          const audioBuffer = Buffer.from(event.delta, 'base64');
+          this.audioHandlers.forEach(handler => handler(audioBuffer));
+        }
+        break;
+
+      case 'response.audio.done':
+      case 'response.output_audio.done':
+        this.logger.log('✅ Audio completo recibido');
+        break;
+
+      // Transcripción
+      case 'conversation.item.input_audio_transcription.completed':
+        this.logger.log(`👤 Usuario: ${event.transcript}`);
+        break;
+
+      case 'conversation.item.input_audio_transcription.failed':
+        this.logger.warn('⚠️ Transcripción fallida:', event.error);
+        break;
+
+      // VAD
+      case 'input_audio_buffer.speech_started':
+        this.logger.log('🎙️ Detectado inicio de habla del usuario');
+        break;
+
+      case 'input_audio_buffer.speech_stopped':
+        this.logger.log('🎙️ Detectado fin de habla del usuario');
+        break;
+
+      case 'input_audio_buffer.committed':
+        this.logger.log('✅ Audio del usuario confirmado');
+        break;
+
+      // Tool calls
+      case 'response.function_call_arguments.delta':
+        // Acumular argumentos si es necesario
+        break;
+
+      case 'response.function_call_arguments.done':
+        this.handleToolCall(event);
+        break;
+
+      // Errores
+      case 'error':
+        this.logger.error('❌ Error de OpenAI:', event.error);
+        break;
+
+      default:
+        // Log de eventos no manejados (para debugging)
+        if (!type.includes('delta')) {
+          this.logger.debug(`📨 Evento no manejado: ${type}`);
+        }
+    }
   }
 
   /**
@@ -375,7 +509,14 @@ Contexto técnico:
    */
   private async handleToolCall(event: any): Promise<void> {
     const { name, call_id, arguments: argsString } = event;
-    const args = JSON.parse(argsString);
+    
+    let args: any;
+    try {
+      args = JSON.parse(argsString);
+    } catch (error) {
+      this.logger.error('Error parseando argumentos de tool call:', error);
+      return;
+    }
 
     this.logger.log(`🔧 Tool call: ${name}(${JSON.stringify(args)})`);
 
@@ -386,41 +527,47 @@ Contexto técnico:
         this.currentSessionId || 'unknown'
       );
 
-      // Enviar resultado usando el SDK
-      if (this.realtimeSession) {
-        this.realtimeSession.send({
-          type: 'conversation.item.create',
-          item: {
-            type: 'function_call_output',
-            call_id,
-            output: JSON.stringify(result)
-          }
-        });
-      }
+      // Enviar resultado de la herramienta
+      this.sendEvent({
+        type: 'conversation.item.create',
+        item: {
+          type: 'function_call_output',
+          call_id,
+          output: JSON.stringify(result)
+        }
+      });
+
+      // Solicitar que el modelo procese el resultado
+      this.sendEvent({
+        type: 'response.create'
+      });
 
       this.logger.log(`✅ Tool ${name} completada`);
     } catch (error) {
-      this.logger.error(`Error en tool ${name}`, error);
+      this.logger.error(`Error en tool ${name}:`, error);
       
-      // Enviar error usando el SDK
-      if (this.realtimeSession) {
-        this.realtimeSession.send({
-          type: 'conversation.item.create',
-          item: {
-            type: 'function_call_output',
-            call_id,
-            output: JSON.stringify({
-              error: 'Error ejecutando herramienta',
-              details: error instanceof Error ? error.message : 'Unknown error'
-            })
-          }
-        });
-      }
+      // Enviar error
+      this.sendEvent({
+        type: 'conversation.item.create',
+        item: {
+          type: 'function_call_output',
+          call_id,
+          output: JSON.stringify({
+            error: 'Error ejecutando herramienta',
+            details: error instanceof Error ? error.message : 'Unknown error'
+          })
+        }
+      });
+
+      // Solicitar que el modelo procese el error
+      this.sendEvent({
+        type: 'response.create'
+      });
     }
   }
 
   /**
-   * Inicia una conversación
+   * Inicia una conversación con el número de casa marcado
    */
   startConversation(houseNumber: string): void {
     if (this.conversationActive) {
@@ -431,43 +578,31 @@ Contexto técnico:
     this.logger.log(`🎙️ Iniciando conversación para casa ${houseNumber}`);
     
     this.conversationActive = true;
+    this.targetHouse = houseNumber;
     
-    // Solicitar respuesta con instrucciones de contexto
-    // IMPORTANTE: Especificar modalities explícitamente para garantizar audio output
-    if (this.realtimeSession) {
-      this.logger.log('📤 Solicitando respuesta inicial con contexto...');
-      this.realtimeSession.send({
-        type: 'response.create',
-        response: {
-          // Forzar modalidad de audio para esta respuesta
-          audio: {
-            output: {
-              format: {
-                type: 'audio/pcm',
-                rate: 24000
-              },
-              voice: 'sage'
-          }
-         },
-          // Instrucciones específicas para esta respuesta (sobrescriben las globales momentáneamente)
-          instructions: `Contexto: Citófono casa ${houseNumber}. Saluda BREVEMENTE y pregunta: nombre, motivo, a qué casa viene. Sé conciso.`,
-        }
-      });
-    }
+    // Actualizar instrucciones del sistema con el contexto de la casa
+    this.configureSession();
+    
+    // Solicitar respuesta inicial
+    this.logger.log('📤 Solicitando respuesta inicial...');
+    this.sendEvent({
+      type: 'response.create'
+      // No se necesita especificar response config, usa la configuración de sesión
+    });
   }
 
   /**
    * Envía audio capturado del micrófono
    */
   sendAudio(audioBuffer: Buffer): void {
-    if (!this.conversationActive || !this.realtimeSession) {
+    if (!this.conversationActive || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return;
     }
 
     // Convertir Buffer a base64
     const base64Audio = audioBuffer.toString('base64');
     
-    this.realtimeSession.send({
+    this.sendEvent({
       type: 'input_audio_buffer.append',
       audio: base64Audio
     });
@@ -484,13 +619,12 @@ Contexto técnico:
     this.logger.log('🛑 Finalizando conversación');
     
     this.conversationActive = false;
+    this.targetHouse = null;
     
     // Crear respuesta para procesar el audio pendiente
-    if (this.realtimeSession) {
-      this.realtimeSession.send({
-        type: 'response.create',
-      });
-    }
+    this.sendEvent({
+      type: 'response.create'
+    });
   }
 
   /**
@@ -515,9 +649,9 @@ Contexto técnico:
       this.endConversation();
     }
 
-    if (this.realtimeSession) {
-      this.realtimeSession.close();
-      this.realtimeSession = null;
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
     }
 
     // Notificar al backend que finalizó la sesión
