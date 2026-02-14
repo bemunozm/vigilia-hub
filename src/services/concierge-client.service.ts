@@ -108,14 +108,12 @@ export class ConciergeClientService {
     }
 
     // Configurar sesión usando el SDK con formato GA correcto
+    // Nota: turn_detection está implícito en GA (semantic_vad por defecto)
     const sessionConfig = {
       type: 'session.update' as const,
       session: {
-        type: 'realtime' as const, // Requerido por el tipo del SDK
-        output_modalities: ['audio'] as ('audio' | 'text')[], // Solo audio para citófono
-        turn_detection: {
-          type: 'semantic_vad' as const,
-        },
+        type: 'realtime' as const,
+        output_modalities: ['audio'] as ('audio' | 'text')[],
         voice: 'sage' as const,
         instructions: this.getSystemInstructions(),
         tools: this.getToolDefinitions(),
