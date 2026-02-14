@@ -5,6 +5,7 @@ import { RelayControllerService } from './relay-controller.service';
 import { AudioManagerService } from './audio-manager.service';
 import { EchoSuppressionService } from './echo-suppression.service';
 import { ConciergeClientService } from './concierge-client.service';
+import { DTMFGeneratorService } from './dtmf-generator.service';
 
 /**
  * Máquina de Estados Finitos para el Audio Router
@@ -25,12 +26,15 @@ export class AudioRouterService {
   private cooldownTimeout: NodeJS.Timeout | null = null;
   private scanInterval: NodeJS.Timeout | null = null;
   private lastSignalTime = 0;
+  private lastDialedNumber: string = ''; // Guardar número marcado para reenvío
   
   private readonly KEYPAD_TIMEOUT_MS: number;
   private readonly COOLDOWN_MS: number;
   private readonly SCAN_INTERVAL_MS: number;
   private readonly MAX_CONVERSATION_TIME_MS: number;
   private readonly DEBOUNCE_MS = 2000; // Evitar múltiples disparos
+  
+  private dtmfGenerator: DTMFGeneratorService;
 
   constructor(
     private readonly localCache: LocalCacheService,
@@ -45,6 +49,7 @@ export class AudioRouterService {
     this.SCAN_INTERVAL_MS = parseInt(process.env.SCAN_INTERVAL_MS || '100', 10);
     this.MAX_CONVERSATION_TIME_MS = parseInt(process.env.MAX_CONVERSATION_TIME_MS || '180000', 10);
 
+    this.dtmfGenerator = new DTMFGeneratorService(audioManager);
     this.logger.log('✅ Audio Router inicializado en estado TRANSPARENT');
   }
 
@@ -153,6 +158,7 @@ export class AudioRouterService {
     }
 
     this.logger.log(`🏠 Casa marcada: ${houseNumber}`);
+    this.lastDialedNumber = houseNumber; // GUARDAR para reenvío posterior
 
     // PASO 1: INTERCEPTAR SEÑAL INMEDIATAMENTE (evita que suene citófono durante decisión)
     this.logger.log(`⚡ Interceptando señal para evaluar (evitar latencia)...`);
@@ -162,17 +168,37 @@ export class AudioRouterService {
     const shouldUseAI = this.localCache.shouldInterceptCall(houseNumber);
 
     if (!shouldUseAI) {
-      // Casa SIN IA: Liberar relés y dejar pasar llamada al citófono GT normal
-      this.logger.log(`📞 Casa sin IA - Liberando señal para citófono GT analógico`);
-      await this.relayController.disableInterception();
-      this.returnToTransparent();
-      // La llamada ahora pasa al teléfono del departamento hasta que cuelguen
+      // Casa SIN IA: Reenviar DTMF y liberar para citófono GT normal
+      await this.transferToAnalogPhone();
       return;
     }
 
     // PASO 3: Casa CON IA → Mantener interceptado y activar Conserje Digital
     this.logger.log(`🤖 Casa con IA - Iniciando Conserje Digital`);
     await this.continueAIInterceptState(houseNumber);
+  }
+
+  /**
+   * Transfiere llamada a teléfono analógico (sin IA o derivación desde IA)
+   * IMPORTANTE: Reenvía señal DTMF al módulo GT antes de liberar
+   */
+  private async transferToAnalogPhone(): Promise<void> {
+    this.logger.log(`📞 Casa sin IA - Reenviando DTMF "${this.lastDialedNumber}" al módulo GT`);
+    
+    // PASO 1: Iniciar playback temporal para DTMF
+    this.audioManager.startPlayback();
+    await this.sleep(100); // Esperar estabilización
+
+    // PASO 2: Enviar tonos DTMF al módulo GT
+    await this.dtmfGenerator.sendDTMFSequence(this.lastDialedNumber);
+    
+    // PASO 3: Liberar relés - ahora el módulo GT establece la llamada
+    this.logger.log(`🔓 Liberando señal - citófono GT completará la llamada`);
+    await this.audioManager.stopPlayback();
+    await this.relayController.disableInterception();
+    
+    this.returnToTransparent();
+    // Llamada ahora en curso entre visitante y residente vía citófono analógico
   }
 
   /**

@@ -152,6 +152,19 @@ export class AudioManagerService {
   }
 
   /**
+   * Reproduce un chunk de audio sin mantener el proceso activo
+   * Útil para tonos DTMF cortos
+   */
+  playChunk(audioData: Buffer): void {
+    if (!this.playbackProcess) {
+      // Si no hay playback activo, usar writePlayback después de iniciar
+      this.logger.warn('Playback no activo, usando writePlayback requiere startPlayback previo');
+      return;
+    }
+    this.writePlayback(audioData);
+  }
+
+  /**
    * Verifica si audio está activo
    */
   isCapturing(): boolean {
