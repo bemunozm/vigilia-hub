@@ -126,11 +126,14 @@ export class ConciergeClientService {
           // Input: audio del usuario
           input: {
             // Formato PCM16 (24kHz es el único samplerate soportado)
-            format: 'pcm16',
+            format: {
+              type: 'audio/pcm',
+              rate: 24000
+            },
             
-            // Transcripción opcional
+            // Transcripción opcional con modelo actualizado
             transcription: {
-              model: 'whisper-1',
+              model: 'gpt-4o-mini-transcribe',
               language: 'es'
             },
             
@@ -145,7 +148,10 @@ export class ConciergeClientService {
           
           // Output: audio del asistente
           output: {
-            format: 'pcm16',
+            format: {
+              type: 'audio/pcm',
+              rate: 24000
+            },
             voice: 'sage'
           }
         },
