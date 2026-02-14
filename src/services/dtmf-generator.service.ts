@@ -1,9 +1,11 @@
 import { Logger } from '../utils/logger';
-import { AudioManagerService } from './audio-manager.service';
+import { spawn } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * Servicio para generar y enviar tonos DTMF al módulo GT del citófono
- * Cuando interceptamos la señal, debemos reenviarla al GT para completar la llamada
+ * Genera archivo WAV temporal y reproduce con aplay
  */
 export class DTMFGeneratorService {
   private readonly logger = new Logger(DTMFGeneratorService.name);
@@ -18,8 +20,12 @@ export class DTMFGeneratorService {
 
   private readonly TONE_DURATION_MS = 100;  // Duración de cada tono
   private readonly TONE_PAUSE_MS = 50;       // Pausa entre tonos
+  private readonly SAMPLE_RATE = 48000;      // Sample rate del hardware
+  private readonly DEVICE_NAME: string;
 
-  constructor(private audioManager: AudioManagerService) {}
+  constructor() {
+    this.DEVICE_NAME = process.env.AUDIO_DEVICE || 'hw:1,0';
+  }
 
   /**
    * Genera y envía una secuencia DTMF al módulo GT
@@ -28,53 +34,109 @@ export class DTMFGeneratorService {
   async sendDTMFSequence(digits: string): Promise<void> {
     this.logger.log(`📞 Enviando secuencia DTMF al módulo GT: ${digits}`);
 
+    const tmpFile = `/tmp/dtmf_${Date.now()}.raw`;
+
+    try {
+      // Generar archivo PCM completo
+      const audioBuffer = this.generateDTMFFile(digits);
+      fs.writeFileSync(tmpFile, audioBuffer);
+
+      // Reproducir con aplay
+      await this.playDTMFFile(tmpFile);
+      
+      this.logger.log(`✅ Secuencia DTMF enviada completamente`);
+    } catch (error: any) {
+      this.logger.error(`Error enviando DTMF: ${error.message}`);
+    } finally {
+      // Limpiar archivo temporal
+      try {
+        fs.unlinkSync(tmpFile);
+      } catch (e) {
+        // Ignorar
+      }
+    }
+  }
+
+  /**
+   * Genera buffer PCM con toda la secuencia DTMF
+   */
+  private generateDTMFFile(digits: string): Buffer {
+    const buffers: Buffer[] = [];
+
     for (const digit of digits) {
       if (!this.DTMF_FREQUENCIES[digit]) {
         this.logger.warn(`⚠️ Dígito inválido para DTMF: ${digit}`);
         continue;
       }
 
-      await this.generateDTMFTone(digit);
-      await this.sleep(this.TONE_PAUSE_MS);
+      // Generar tono
+      buffers.push(this.generateDTMFTone(digit));
+      
+      // Generar silencio entre tonos
+      buffers.push(this.generateSilence(this.TONE_PAUSE_MS));
     }
 
-    this.logger.log(`✅ Secuencia DTMF enviada completamente`);
+    return Buffer.concat(buffers);
   }
 
   /**
    * Genera un tono DTMF específico
    */
-  private async generateDTMFTone(digit: string): Promise<void> {
+  private generateDTMFTone(digit: string): Buffer {
     const [freq1, freq2] = this.DTMF_FREQUENCIES[digit];
     
-    // Generar buffer con dos frecuencias combinadas
-    const sampleRate = 48000; // Debe coincidir con AudioManager
-    const numSamples = Math.floor((sampleRate * this.TONE_DURATION_MS) / 1000);
+    const numSamples = Math.floor((this.SAMPLE_RATE * this.TONE_DURATION_MS) / 1000);
     const buffer = Buffer.alloc(numSamples * 2); // 16-bit PCM
 
     for (let i = 0; i < numSamples; i++) {
-      const t = i / sampleRate;
+      const t = i / this.SAMPLE_RATE;
       
       // Combinar dos ondas sinusoidales
       const amplitude1 = Math.sin(2 * Math.PI * freq1 * t);
       const amplitude2 = Math.sin(2 * Math.PI * freq2 * t);
       const combined = (amplitude1 + amplitude2) / 2;
       
-      // Convertir a 16-bit PCM
-      const sample = Math.floor(combined * 32767 * 0.5); // 50% volumen
+      // Convertir a 16-bit PCM con volumen alto (80%)
+      const sample = Math.floor(combined * 32767 * 0.8);
       buffer.writeInt16LE(sample, i * 2);
     }
 
-    // Enviar a la línea de audio del citófono (speaker)
-    this.audioManager.playChunk(buffer);
-    
-    await this.sleep(this.TONE_DURATION_MS);
+    return buffer;
   }
 
   /**
-   * Helper para delays
+   * Genera silencio
    */
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+  private generateSilence(durationMs: number): Buffer {
+    const numSamples = Math.floor((this.SAMPLE_RATE * durationMs) / 1000);
+    return Buffer.alloc(numSamples * 2); // Silencio = todos ceros
+  }
+
+  /**
+   * Reproduce archivo DTMF con aplay
+   */
+  private playDTMFFile(filePath: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const aplay = spawn('aplay', [
+        '-D', this.DEVICE_NAME,
+        '-f', 'S16_LE',
+        '-c', '1',
+        '-r', this.SAMPLE_RATE.toString(),
+        '-t', 'raw',
+        filePath
+      ]);
+
+      aplay.on('close', (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`aplay falló con código ${code}`));
+        }
+      });
+
+      aplay.on('error', (error) => {
+        reject(error);
+      });
+    });
   }
 }

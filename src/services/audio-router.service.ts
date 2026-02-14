@@ -50,7 +50,7 @@ export class AudioRouterService {
     this.SCAN_INTERVAL_MS = parseInt(process.env.SCAN_INTERVAL_MS || '100', 10);
     this.MAX_CONVERSATION_TIME_MS = parseInt(process.env.MAX_CONVERSATION_TIME_MS || '180000', 10);
 
-    this.dtmfGenerator = new DTMFGeneratorService(audioManager);
+    this.dtmfGenerator = new DTMFGeneratorService();
     this.logger.log('✅ Audio Router inicializado en estado TRANSPARENT');
   }
 
@@ -196,19 +196,14 @@ export class AudioRouterService {
   private async transferToAnalogPhone(): Promise<void> {
     this.logger.log(`📞 Casa sin IA - Reenviando DTMF "${this.lastDialedNumber}" al módulo GT`);
     
-    // PASO 1: Iniciar playback temporal para DTMF
-    this.audioManager.startPlayback();
-    await this.sleep(100); // Esperar estabilización
-
-    // PASO 2: Enviar tonos DTMF al módulo GT
+    // PASO 1: Enviar tonos DTMF al módulo GT (genera archivo temporal y usa aplay)
     await this.dtmfGenerator.sendDTMFSequence(this.lastDialedNumber);
     
-    // PASO 3: Liberar relés - ahora el módulo GT establece la llamada
+    // PASO 2: Liberar relés - ahora el módulo GT establece la llamada
     this.logger.log(`🔓 Liberando señal - citófono GT completará la llamada`);
-    await this.audioManager.stopPlayback();
     await this.relayController.disableInterception();
     
-    // PASO 4: Activar monitoreo de colgar
+    // PASO 3: Activar monitoreo de colgar
     this.isAnalogCallActive = true;
     this.logger.log(`📞 Llamada analógica activa - Monitoreando GPIO colgar`);
     
