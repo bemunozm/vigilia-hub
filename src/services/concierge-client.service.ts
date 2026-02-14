@@ -131,21 +131,27 @@ export class ConciergeClientService {
         // Usaremos la voz por defecto ('alloy') por ahora para asegurar conexión.
         
         instructions: this.getSystemInstructions(),
-        // voice: 'sage', // CAUSA ERROR: Unknown parameter: 'session.voice'
         
-        // input_audio_format: 'pcm16', // CAUSA ERROR: Unknown parameter: 'session.input_audio_format'
-        // output_audio_format: 'pcm16', // Se asumen pcm16 por defecto en este modelo
-        
-        input_audio_transcription: {
-           model: 'whisper-1' 
-        },
-
-        turn_detection: {
-          type: 'server_vad',
-          threshold: 0.5,
-          prefix_padding_ms: 300,
-          silence_duration_ms: 500,
-          create_response: true
+        // Estructura anidada 'audio' requerida por versiones recientes (RealtimeSession)
+        // en lugar de parámetros planos que son rechazados.
+        audio: {
+          input: {
+            format: 'pcm16',
+            transcription: {
+              model: 'whisper-1'
+            },
+            turn_detection: {
+              type: 'server_vad',
+              threshold: 0.5,
+              prefix_padding_ms: 300,
+              silence_duration_ms: 500,
+              create_response: true
+            }
+          },
+          output: {
+            format: 'pcm16',
+            voice: 'sage'
+          }
         },
         
         tools: this.getToolDefinitions(),
