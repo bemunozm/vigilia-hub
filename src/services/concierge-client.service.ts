@@ -254,6 +254,13 @@ Contexto técnico:
   private setupEventHandlers(): void {
     if (!this.realtimeSession) return;
 
+    // IMPORTANTE: Capturar TODOS los eventos para debugging
+    this.realtimeSession.on('event', (event: any) => {
+      if (!event.type.includes('delta') && !event.type.includes('input_audio_buffer')) {
+        this.logger.log(`📥 Evento: ${event.type}`, JSON.stringify(event, null, 2));
+      }
+    });
+
     // Handler de errores (MUY IMPORTANTE)
     this.realtimeSession.on('error', (error: any) => {
       this.logger.error('❌ Error de OpenAI:', error);
@@ -266,13 +273,15 @@ Contexto técnico:
     });
 
     // Sesión actualizada
-    this.realtimeSession.on('session.updated', () => {
+    this.realtimeSession.on('session.updated', (event: any) => {
       this.logger.log('✅ Sesión actualizada correctamente');
+      this.logger.log('Configuración:', JSON.stringify(event.session, null, 2));
     });
 
     // Respuesta iniciada
     this.realtimeSession.on('response.created', (event: any) => {
       this.logger.log(`🎬 Respuesta iniciada: ${event.response?.id}`);
+      this.logger.log('Respuesta:', JSON.stringify(event.response, null, 2));
     });
 
     // Item agregado
