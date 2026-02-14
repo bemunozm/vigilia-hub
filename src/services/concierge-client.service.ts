@@ -20,7 +20,7 @@ export class ConciergeClientService {
   private targetHouse: string | null = null;
   
   // Configuración del modelo Realtime (versión GA estable)
-  private readonly REALTIME_MODEL = 'gpt-4o-realtime-preview-2024-10-01';
+  private readonly REALTIME_MODEL = 'gpt-realtime-mini-2025-12-15';
   private readonly REALTIME_WS_URL = 'wss://api.openai.com/v1/realtime';
 
   constructor(
@@ -64,7 +64,6 @@ export class ConciergeClientService {
       this.ws = new WebSocket(wsUrl, {
         headers: {
           'Authorization': `Bearer ${ephemeralToken}`,
-          'OpenAI-Beta': 'realtime=v1'
         }
       });
 
