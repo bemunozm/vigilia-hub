@@ -430,7 +430,13 @@ export class ConciergeClientService {
 
       // Errores
       case 'error':
-        // Log detallado de CUALQUIER error
+        // Ignorar error de cancelación si no hay respuesta activa (común en interrupciones rápidas)
+        if (event.error?.code === 'response_cancel_not_active') {
+          this.logger.debug('ℹ️ Aviso: Cancelación enviada sin respuesta activa (ignorable)');
+          return;
+        }
+
+        // Log detallado de CUALQUIER otro error
         this.logger.error('❌ Error de OpenAI (Detalle Completo):', JSON.stringify(event, null, 2));
         if (event.error?.code) {
              this.logger.error(`Error Code: ${event.error.code} - Message: ${event.error.message}`);
