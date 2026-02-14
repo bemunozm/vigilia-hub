@@ -22,10 +22,9 @@ export class ConciergeClientService {
   private backendUrl: string;
   private audioHandlers: ((audioBuffer: Buffer) => void)[] = [];
   
-  // Configuración del modelo Realtime
-  // Usar gpt-realtime-mini (GA modelo económico): https://developers.openai.com/api/docs/models/gpt-realtime-mini
-  private readonly REALTIME_MODEL = 'gpt-realtime-mini';
-  private readonly REALTIME_API_VERSION = 'realtime=v1';
+  // Configuración del modelo Realtime GA (https://developers.openai.com/api/docs/guides/realtime-websocket)
+  // Usar 'gpt-realtime' que mapea a gpt-realtime-mini (GA modelo económico)
+  private readonly REALTIME_MODEL = 'gpt-realtime';
 
   constructor(
     private readonly websocketClient: WebSocketClientService
@@ -71,11 +70,11 @@ export class ConciergeClientService {
         // Construir URL de WebSocket para Realtime API
         const url = `wss://api.openai.com/v1/realtime?model=${this.REALTIME_MODEL}`;
         
-        // Crear conexión WebSocket con headers oficiales
+        // Crear conexión WebSocket con headers oficiales GA
+        // Solo Authorization es necesario (NO OpenAI-Beta, ese era para versión beta)
         this.ws = new WebSocket(url, {
           headers: {
             'Authorization': `Bearer ${ephemeralToken}`,
-            'OpenAI-Beta': this.REALTIME_API_VERSION,
           }
         });
 
