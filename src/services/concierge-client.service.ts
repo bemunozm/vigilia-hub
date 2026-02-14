@@ -125,10 +125,7 @@ export class ConciergeClientService {
               rate: 24000, // 24kHz según nuestra configuración
             },
             turn_detection: {
-              type: 'semantic_vad', // VAD semántico (GA)
-              threshold: 0.5,
-              prefix_padding_ms: 300,
-              silence_duration_ms: 500,
+              type: 'semantic_vad', // VAD semántico GA (sin parámetros adicionales)
             },
           },
           output: {
