@@ -404,7 +404,8 @@ IMPORTANTE:
         break;
 
       case 'conversation.item.input_audio_transcription.failed':
-        this.logger.warn('⚠️ Transcripción fallida:', JSON.stringify(event.error, null, 2));
+        // FIX: Concatenar error al mensaje para que el logger personalizado lo muestre
+        this.logger.warn(`⚠️ Transcripción fallida: ${JSON.stringify(event.error, null, 2)}`);
         break;
 
       // VAD
