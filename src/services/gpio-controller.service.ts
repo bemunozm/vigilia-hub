@@ -19,12 +19,13 @@ export class GPIOControllerService {
       this.muxControlPins = [5, 6, 13, 19].map(pin => new Gpio(pin, 'out'));
       
       // Pin de señal del multiplexor (conectado a teclado)
-      this.muxSignalPin = new Gpio(26, 'in', 'rising');
+      // PUD_DOWN: sin señal = LOW, tecla presionada = HIGH
+      this.muxSignalPin = new Gpio(26, 'in', 'rising', 'down');
       
       // Pin para detectar colgar (hook switch) - GPIO 22 (Pin 15)
-      // HIGH = teléfono descolgado, LOW = colgado
+      // PUD_UP: sin hardware = HIGH (descolgado), pin a GND = LOW (colgado)
       const hangupGpio = parseInt(process.env.HANGUP_GPIO || '22', 10);
-      this.hangupPin = new Gpio(hangupGpio, 'in', 'both'); // Detectar ambos flancos
+      this.hangupPin = new Gpio(hangupGpio, 'in', 'both', 'up'); // Pull-up para hook switch
       
       this.isAvailable = true;
       this.logger.log('✅ GPIO Multiplexor inicializado');

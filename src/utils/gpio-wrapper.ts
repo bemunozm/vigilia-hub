@@ -11,6 +11,7 @@ const logger = new Logger('GPIOWrapper');
 export type Direction = 'in' | 'out' | 'high' | 'low';
 export type Edge = 'none' | 'rising' | 'falling' | 'both';
 export type Value = 0 | 1;
+export type PullMode = 'up' | 'down'; // Resistores pull
 
 /**
  * Clase GPIO única que detecta plataforma y usa pigpio o simula
@@ -26,7 +27,7 @@ export class Gpio {
     gpio: number,
     direction: Direction,
     edge?: Edge,
-    options?: any
+    pullMode?: PullMode // 'up' o 'down' para inputs
   ) {
     this.gpio = gpio;
 
@@ -39,9 +40,15 @@ export class Gpio {
         const Pigpio = require('pigpio').Gpio;
         const mode = direction === 'in' ? Pigpio.INPUT : Pigpio.OUTPUT;
         
+        // Configurar pull resistor según parámetro o default
+        let pudConfig = Pigpio.PUD_OFF;
+        if (direction === 'in') {
+          pudConfig = pullMode === 'up' ? Pigpio.PUD_UP : Pigpio.PUD_DOWN;
+        }
+        
         this.pigpioGpio = new Pigpio(gpio, {
           mode: mode,
-          pullUpDown: direction === 'in' ? Pigpio.PUD_DOWN : Pigpio.PUD_OFF
+          pullUpDown: pudConfig
         });
 
         // Valor inicial para outputs
