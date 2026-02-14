@@ -12,6 +12,7 @@ export class AudioManagerService {
   private readonly CHANNELS: number;
   private readonly AUDIO_DEVICE: string;  // Para reproducción (audífonos)
   private readonly CAPTURE_DEVICE: string; // Para captura (micrófono)
+  private audioEndTime = 0; // Timestamp estimado de fin de reproducción
 
   constructor() {
     this.SAMPLE_RATE_CAPTURE = parseInt(process.env.SAMPLE_RATE || '48000', 10);
@@ -159,6 +160,14 @@ export class AudioManagerService {
    * Mata el proceso actual (limpiando buffer) y reinicia uno nuevo
    */
   interruptPlayback(): void {
+    // Optimización: Solo interrumpir si realmente hay audio reproduciéndose (o en buffer reciente)
+    // Esto evita cortes innecesarios cuando el usuario responde normalmente después de una pausa
+    if (Date.now() > this.audioEndTime) {
+      // El audio ya terminó hace rato (buffer vacío), no hay nada que interrumpir
+      this.logger.debug('🔇 Barge-in ignorado: No hay audio activo');
+      return;
+    }
+
     if (this.playbackProcess) {
       this.logger.log('🛑 Interrumpiendo reproducción actual (Barge-in)');
       // Matar proceso forcefuly para vaciar buffer de hardware
@@ -166,10 +175,6 @@ export class AudioManagerService {
       this.playbackProcess = null;
     }
     // Reiniciar inmediatamente
-    // NOTA: NO llamamos a startPlayback() aquí.
-    // Dejamos que el próximo writePlayback() detecte que no hay proceso y lo inicie si es necesario, 
-    // o mejor aun, dejamos que el flujo natural lo maneje.
-    // Iniciar aplay sin datos causa un "pop" o delay esperando datos
     this.startPlayback(); 
   }
 
@@ -181,6 +186,14 @@ export class AudioManagerService {
     if (!this.playbackProcess) {
        this.startPlayback();
     }
+
+    // Calcular duración del chunk: bytes / (rate * channels * bytesPerSample)
+    // 24000 Hz * 1 channel * 2 bytes (16bit) = 48000 bytes/sec
+    const durationMs = (audioData.length / 48000) * 1000;
+    
+    // Extender el tiempo estimado de fin
+    // Si el buffer estaba vacío (now > endTime), reiniciar desde now
+    this.audioEndTime = Math.max(Date.now(), this.audioEndTime) + durationMs;
 
     // Verificación robusta antes de escribir
     if (!this.playbackProcess || 
