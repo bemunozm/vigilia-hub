@@ -302,8 +302,11 @@ Contexto técnico:
         break;
 
       case 'error':
-        this.logger.error('❌ Error de OpenAI:', JSON.stringify(event.error, null, 2));
-        this.logger.error('❌ Evento completo:', JSON.stringify(event, null, 2));
+        this.logger.error('❌ Error de OpenAI:');
+        this.logger.error(`   Tipo: ${event.type}`);
+        this.logger.error(`   Código: ${event.error?.code || 'N/A'}`);
+        this.logger.error(`   Mensaje: ${event.error?.message || 'N/A'}`);
+        this.logger.error(`   Evento completo: ${JSON.stringify(event, null, 2)}`);
         break;
     }
   }

@@ -28,6 +28,7 @@ export class AudioRouterService {
   private lastSignalTime = 0;
   private lastDialedNumber: string = ''; // Guardar número marcado para reenvío
   private isAnalogCallActive = false; // Flag para monitorear colgar durante llamada analógica
+  private isEstablishingAIConnection = false; // Flag para evitar monitorear colgar durante setup
   
   private readonly KEYPAD_TIMEOUT_MS: number;
   private readonly COOLDOWN_MS: number;
@@ -83,8 +84,8 @@ export class AudioRouterService {
         return; // No procesar teclas durante llamada activa
       }
 
-      // Monitorear colgar durante conversación con IA
-      if (this.state === AudioState.AI_INTERCEPT) {
+      // Monitorear colgar durante conversación con IA (solo si ya está establecida)
+      if (this.state === AudioState.AI_INTERCEPT && !this.isEstablishingAIConnection) {
         const hangupDetected = this.gpioController.isHangupDetected();
         if (hangupDetected) {
           this.logger.log('📞 Colgado detectado - Finalizando conversación IA');
@@ -258,6 +259,7 @@ export class AudioRouterService {
    */
   private async continueAIInterceptState(houseNumber: string): Promise<void> {
     this.setState(AudioState.AI_INTERCEPT);
+    this.isEstablishingAIConnection = true; // Evitar monitorear colgar durante setup
     
     try {
       // Relés ya están activos desde processHouseNumber()
@@ -274,6 +276,7 @@ export class AudioRouterService {
       // 3. Configurar pipeline de audio
       this.setupAudioPipeline();
       
+      this.isEstablishingAIConnection = false; // Ahora sí monitorear colgar
       this.logger.log('🤖 Modo AI_INTERCEPT activo - Conversación iniciada');
       
       // 4. Timeout de seguridad
@@ -284,6 +287,7 @@ export class AudioRouterService {
         }
       }, this.MAX_CONVERSATION_TIME_MS);
     } catch (error) {
+      this.isEstablishingAIConnection = false; // Resetear flag en caso de error
       this.logger.error('Error en AI_INTERCEPT', error);
       await this.enterCooldownState();
     }
@@ -325,6 +329,7 @@ export class AudioRouterService {
    */
   private async exitAIInterceptState(): Promise<void> {
     this.logger.log('🛑 Saliendo de AI_INTERCEPT');
+    this.isEstablishingAIConnection = false; // Resetear flag
     
     // Finalizar conversación
     this.conciergeClient.endConversation();
