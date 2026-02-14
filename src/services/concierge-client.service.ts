@@ -109,21 +109,20 @@ export class ConciergeClientService {
 
     // Configurar sesión usando el SDK con formato GA correcto
     const sessionConfig = {
-      type: 'session.update',
+      type: 'session.update' as const,
       session: {
-        type: 'realtime',
-        model: 'gpt-realtime',
-        output_modalities: ['audio'], // Solo audio para citófono
-        input_audio_format: 'pcm16',  // Formato simplificado GA
-        output_audio_format: 'pcm16', // Formato simplificado GA
-        input_audio_transcription: null, // Opcional: deshabilitar transcripción si no la necesitamos
+        type: 'realtime' as const,
+        model: 'gpt-realtime' as const,
+        output_modalities: ['audio'] as ('audio' | 'text')[], // Solo audio para citófono
+        input_audio_format: 'pcm16' as const,
+        output_audio_format: 'pcm16' as const,
         turn_detection: {
-          type: 'semantic_vad',
+          type: 'semantic_vad' as const,
         },
-        voice: 'sage',
+        voice: 'sage' as const,
         instructions: this.getSystemInstructions(),
         tools: this.getToolDefinitions(),
-        tool_choice: 'auto',
+        tool_choice: 'auto' as const,
       }
     };
 
@@ -293,25 +292,9 @@ Contexto técnico:
       this.logger.log(`✅ Output item completado: ${event.item?.type}`);
     });
 
-    // TODOS los posibles eventos de audio (probar variantes)
+    // Evento de audio delta (chunks de audio PCM)
     this.realtimeSession.on('response.output_audio.delta', (event: any) => {
-      this.logger.log('🔊 Audio delta recibido (output_audio)');
-      if (event.delta) {
-        const audioBuffer = Buffer.from(event.delta, 'base64');
-        this.audioHandlers.forEach(handler => handler(audioBuffer));
-      }
-    });
-
-    this.realtimeSession.on('response.audio.delta', (event: any) => {
-      this.logger.log('🔊 Audio delta recibido (audio)');
-      if (event.delta) {
-        const audioBuffer = Buffer.from(event.delta, 'base64');
-        this.audioHandlers.forEach(handler => handler(audioBuffer));
-      }
-    });
-
-    this.realtimeSession.on('response.audio_transcript.delta', (event: any) => {
-      this.logger.log('🔊 Audio delta recibido (audio_transcript)');
+      this.logger.log('🔊 Audio delta recibido');
       if (event.delta) {
         const audioBuffer = Buffer.from(event.delta, 'base64');
         this.audioHandlers.forEach(handler => handler(audioBuffer));
@@ -437,13 +420,10 @@ Contexto técnico:
         }
       });
       
-      // Solicitar respuesta de la IA con configuración explícita de audio
-      this.logger.log('📤 Solicitando respuesta con audio...');
+      // Solicitar respuesta de la IA
+      this.logger.log('📤 Solicitando respuesta...');
       this.realtimeSession.send({
-        type: 'response.create',
-        response: {
-          modalities: ['audio'],  // Asegurar que responda con audio
-        }
+        type: 'response.create'
       });
     }
   }
