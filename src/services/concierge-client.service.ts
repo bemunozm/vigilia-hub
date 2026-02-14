@@ -48,7 +48,8 @@ export class ConciergeClientService {
       this.logger.log('🤖 Conectando a OpenAI Realtime API...');
 
       return new Promise((resolve, reject) => {
-        const url = 'wss://api.openai.com/v1/realtime?model=gpt-realtime-mini';
+        // Usar modelo oficial: gpt-4o-mini-realtime-preview
+        const url = 'wss://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview';
         
         this.ws = new WebSocket(url, {
           headers: {
@@ -84,9 +85,9 @@ export class ConciergeClientService {
     const sessionConfig = {
       type: 'session.update',
       session: {
-        modalities: ['text', 'audio'],
+        modalities: ['audio'], // Solo audio, como en el frontend
         instructions: this.getSystemInstructions(),
-        voice: 'alloy',
+        voice: 'sage', // Misma voz que el frontend
         input_audio_format: 'pcm16',
         output_audio_format: 'pcm16',
         input_audio_transcription: {
