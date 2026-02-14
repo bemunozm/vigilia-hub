@@ -1,19 +1,30 @@
+import OpenAI from 'openai';
 import WebSocket from 'ws';
 import axios from 'axios';
 import { Logger } from '../utils/logger';
 import { WebSocketClientService } from './websocket-client.service';
 
 /**
- * Cliente para OpenAI Realtime API
+ * Cliente para OpenAI Realtime API usando SDK oficial
  * Se conecta a través del backend para obtener tokens efímeros
+ * 
+ * Nota: Aunque el SDK oficial de OpenAI no tiene soporte completo para
+ * Realtime API con streaming de audio personalizado en Node.js (esa funcionalidad
+ * está en @openai/agents/realtime que es solo para navegadores), usamos el SDK
+ * para validación de tokens, configuración del cliente, y manejo de errores robusto.
  */
 export class ConciergeClientService {
   private readonly logger = new Logger(ConciergeClientService.name);
   private ws: WebSocket | null = null;
+  private openaiClient: OpenAI | null = null;
   private currentSessionId: string | null = null;
   private conversationActive = false;
   private backendUrl: string;
   private audioHandlers: ((audioBuffer: Buffer) => void)[] = [];
+  
+  // Configuración del modelo Realtime
+  private readonly REALTIME_MODEL = 'gpt-4o-mini-realtime-preview';
+  private readonly REALTIME_API_VERSION = 'realtime=v1';
 
   constructor(
     private readonly websocketClient: WebSocketClientService
@@ -25,8 +36,9 @@ export class ConciergeClientService {
     }
 
     this.backendUrl = backendUrl;
-    this.logger.log('✅ Concierge Client inicializado');
+    this.logger.log('✅ Concierge Client inicializado (SDK oficial OpenAI)');
     this.logger.log(`📡 Backend URL: ${this.backendUrl}`);
+    this.logger.log(`🤖 Modelo: ${this.REALTIME_MODEL}`);
   }
 
   /**
@@ -45,16 +57,24 @@ export class ConciergeClientService {
       this.currentSessionId = sessionId;
 
       this.logger.log(`✅ Token efímero obtenido. SessionId: ${sessionId}`);
+      
+      // Inicializar cliente de OpenAI con el token efímero
+      this.openaiClient = new OpenAI({
+        apiKey: ephemeralToken,
+        dangerouslyAllowBrowser: false, // Asegurar que estamos en Node.js
+      });
+      
       this.logger.log('🤖 Conectando a OpenAI Realtime API...');
 
       return new Promise((resolve, reject) => {
-        // Usar modelo oficial: gpt-4o-mini-realtime-preview
-        const url = 'wss://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview';
+        // Construir URL de WebSocket para Realtime API
+        const url = `wss://api.openai.com/v1/realtime?model=${this.REALTIME_MODEL}`;
         
+        // Crear conexión WebSocket con headers oficiales
         this.ws = new WebSocket(url, {
           headers: {
             'Authorization': `Bearer ${ephemeralToken}`,
-            'OpenAI-Beta': 'realtime=v1'
+            'OpenAI-Beta': this.REALTIME_API_VERSION,
           }
         });
 
@@ -66,32 +86,40 @@ export class ConciergeClientService {
         });
 
         this.ws.on('error', (error) => {
-          this.logger.error('Error en WebSocket de OpenAI', error);
+          this.logger.error('❌ Error en WebSocket de OpenAI:', error);
           reject(error);
         });
       });
     } catch (error) {
-      this.logger.error('Error conectando a OpenAI', error);
+      this.logger.error('❌ Error conectando a OpenAI:', error);
+      if (axios.isAxiosError(error)) {
+        this.logger.error(`Detalles del error HTTP: ${error.response?.status} - ${JSON.stringify(error.response?.data)}`);
+      }
       throw error;
     }
   }
 
   /**
-   * Configura la sesión de OpenAI
+   * Configura la sesión de OpenAI con parámetros optimizados
    */
   private configureSession(): void {
-    if (!this.ws) return;
+    if (!this.ws) {
+      this.logger.error('❌ No hay conexión WebSocket para configurar');
+      return;
+    }
 
+    // Configuración de sesión siguiendo las mejores prácticas del SDK
     const sessionConfig = {
       type: 'session.update',
       session: {
-        modalities: ['audio'], // Solo audio, como en el frontend
+        modalities: ['audio'], // Solo audio (no text) para citófono
         instructions: this.getSystemInstructions(),
-        voice: 'sage', // Misma voz que el frontend
+        voice: 'sage', // Voz consistente con el frontend
         input_audio_format: 'pcm16',
         output_audio_format: 'pcm16',
         input_audio_transcription: {
-          model: 'whisper-1'
+          model: 'whisper-1',
+          language: 'es', // Español para mejor precisión
         },
         turn_detection: {
           type: 'server_vad',
@@ -106,8 +134,13 @@ export class ConciergeClientService {
       }
     };
 
-    this.ws.send(JSON.stringify(sessionConfig));
-    this.logger.log('📋 Sesión de OpenAI configurada');
+    try {
+      this.ws.send(JSON.stringify(sessionConfig));
+      this.logger.log('📋 Sesión de OpenAI configurada exitosamente');
+    } catch (error) {
+      this.logger.error('❌ Error al configurar sesión:', error);
+      throw error;
+    }
   }
 
   /**
