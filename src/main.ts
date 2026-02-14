@@ -126,13 +126,13 @@ class VigiliaHubApplication {
 
     try {
       // Orden inverso de inicialización
+      if (this.testApi) await this.testApi.stop();
       if (this.audioRouter) await this.audioRouter.cleanup();
       if (this.conciergeClient) await this.conciergeClient.cleanup();
       if (this.websocketClient) this.websocketClient.cleanup();
       if (this.audioManager) this.audioManager.cleanup();
       if (this.relayController) this.relayController.cleanup();
       if (this.gpioController) this.gpioController.cleanup();
-      if (this.connectivity) this.connectivity.cleanup();
       if (this.localCache) await this.localCache.cleanup();
 
       logger.log('✅ Limpieza completada');
