@@ -141,7 +141,8 @@ export class ConciergeClientService {
               rate: 24000
             },
             transcription: {
-              model: 'whisper-1'
+              model: 'whisper-1',
+              language: 'es'
             },
             turn_detection: {
               type: 'server_vad',
@@ -391,7 +392,7 @@ IMPORTANTE:
         break;
 
       case 'conversation.item.input_audio_transcription.failed':
-        this.logger.warn('⚠️ Transcripción fallida:', event.error);
+        this.logger.warn('⚠️ Transcripción fallida:', JSON.stringify(event.error, null, 2));
         break;
 
       // VAD
