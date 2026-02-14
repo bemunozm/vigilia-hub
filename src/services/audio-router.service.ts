@@ -83,6 +83,16 @@ export class AudioRouterService {
         return; // No procesar teclas durante llamada activa
       }
 
+      // Monitorear colgar durante conversación con IA
+      if (this.state === AudioState.AI_INTERCEPTED) {
+        const hangupDetected = this.gpioController.isHangupDetected();
+        if (hangupDetected) {
+          this.logger.log('📞 Colgado detectado - Finalizando conversación IA');
+          this.endAICall();
+        }
+        return; // No procesar teclas durante conversación IA
+      }
+
       // Solo procesar teclas si estamos en TRANSPARENT y sin llamada activa
       if (this.state !== AudioState.TRANSPARENT) {
         return;
@@ -219,7 +229,13 @@ export class AudioRouterService {
     this.lastDialedNumber = '';
     this.logger.log(`✅ Llamada analógica finalizada - Sistema listo para nueva llamada`);
   }
-
+  /**
+   * Finaliza conversación con IA cuando se detecta colgar
+   */
+  private endAICall(): void {
+    this.logger.log('🛑 Finalizando conversación IA por colgar');
+    this.exitAIInterceptState();
+  }
   /**
    * Entra en modo TRANSPARENT (citófono normal)
    */
