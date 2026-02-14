@@ -114,10 +114,19 @@ export class ConciergeClientService {
     const sessionConfig = {
       type: 'session.update',
       session: {
-        // Parametros requeridos (?)
-        type: 'realtime', // Intentando satisfacer el error 'missing_required_parameter: session.type'
+        // CORRECCION CRITICA: El API rechaza "modalities", usa "modalities" en Beta pero "output_modalities" en GA WebSocket object?
+        // El log del backend muestra "output_modalities": ["audio"].
+        // Intentaremos usar "modalities" -> "output_modalities" (como estaba al inicio) ya que "modalities" falló.
+        // Ademas mantenemos type='realtime' que solucionó el error de parametro requerido.
+        type: 'realtime', 
         
-        modalities: ['audio', 'text'],
+        // modalities: ['audio', 'text'], // ESTO FALLÓ ("Unknown parameter")
+        // Probamos sin modalities explícito para ver si toma default, o usamos output_modalities si queremos cambiarlo.
+        // Vamos a comentar modalities para que no falle el update. Las tools deberían funcionar igual.
+        // Si no hay texto, tal vez no pueda emitir function calls? 
+        // Pero "output_modalities": ["audio"] es el default y function calling funciona con audio inputs.
+        // Vamos a probar SIN este campo para asegurar que session.update pase sin error.
+        
         instructions: this.getSystemInstructions(),
         voice: 'sage',
         input_audio_format: 'pcm16',
