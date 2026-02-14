@@ -129,9 +129,10 @@ export class ConciergeClientService {
               type: 'audio/pcm' as const,
               rate: 24000 as const
             },
-            transcription: {
-              model: 'whisper-1' as const,
-            },
+            // NOTA: Transcripción deshabilitada temporalmente - el modelo procesa audio directamente
+            // transcription: {
+            //   model: 'whisper-1' as const,
+            // },
             // VAD (Server VAD) para detección automática de turnos
             turn_detection: {
               type: 'server_vad' as const,
@@ -432,22 +433,24 @@ Contexto técnico:
     this.conversationActive = true;
     
     // Solicitar respuesta con instrucciones de contexto
-    // IMPORTANTE: No enviar mensaje de texto cuando usamos output_modalities: ['audio']
-    // En su lugar, usar el parámetro 'instructions' en response.create para dar contexto
+    // IMPORTANTE: Especificar modalities explícitamente para garantizar audio output
     if (this.realtimeSession) {
       this.logger.log('📤 Solicitando respuesta inicial con contexto...');
       this.realtimeSession.send({
         type: 'response.create',
         response: {
+          // Forzar modalidad de audio para esta respuesta
+          audio: {
+            output: {
+              format: {
+                type: 'audio/pcm',
+                rate: 24000
+              },
+              voice: 'sage'
+          }
+         },
           // Instrucciones específicas para esta respuesta (sobrescriben las globales momentáneamente)
-          instructions: `Contexto importante: Estás atendiendo una llamada del citófono para la casa número ${houseNumber}. 
-          
-Inicia la conversación saludando brevemente al visitante y pregunta directamente:
-1. Su nombre
-2. Motivo de visita
-3. A qué casa/departamento viene
-
-Sé profesional pero conciso. No des explicaciones largas, ve directo al punto.`,
+          instructions: `Contexto: Citófono casa ${houseNumber}. Saluda BREVEMENTE y pregunta: nombre, motivo, a qué casa viene. Sé conciso.`,
         }
       });
     }
