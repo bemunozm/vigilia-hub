@@ -23,7 +23,8 @@ export class ConciergeClientService {
   private audioHandlers: ((audioBuffer: Buffer) => void)[] = [];
   
   // Configuración del modelo Realtime
-  private readonly REALTIME_MODEL = 'gpt-4o-mini-realtime-preview';
+  // Usar modelo oficial de OpenAI: https://platform.openai.com/docs/guides/realtime/overview
+  private readonly REALTIME_MODEL = 'gpt-4o-realtime-preview-2024-12-17';
   private readonly REALTIME_API_VERSION = 'realtime=v1';
 
   constructor(
