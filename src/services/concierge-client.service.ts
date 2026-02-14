@@ -141,8 +141,7 @@ export class ConciergeClientService {
         instructions: this.getSystemInstructions(),
         tools: this.getToolDefinitions(),
         tool_choice: 'auto',
-        temperature: 0.8,
-        max_response_output_tokens: 4096,
+        // Nota: temperature y max_tokens se configuran por respuesta, no por sesión en GA
       }
     };
 
