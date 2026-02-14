@@ -112,6 +112,7 @@ export class ConciergeClientService {
     const sessionConfig = {
       type: 'session.update',
       session: {
+        type: 'realtime', // Requerido en GA API
         modalities: ['audio'], // Solo audio (no text) para citófono
         instructions: this.getSystemInstructions(),
         voice: 'sage', // Voz consistente con el frontend
