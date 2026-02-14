@@ -20,8 +20,7 @@ export class ConciergeClientService {
   private audioDoneHandlers: (() => void)[] = [];
   private speechStartedHandlers: (() => void)[] = [];
   private targetHouse: string | null = null;
-  private isInterrupted = false; // Deprecated but kept for type compatibility if needed
-  private isSpeaking = false; // Flag para Half-Duplex
+  private isInterrupted = false;
   
   // Configuración del modelo Realtime (versión GA estable)
   private readonly REALTIME_MODEL = 'gpt-realtime-mini-2025-12-15';
@@ -371,7 +370,10 @@ export class ConciergeClientService {
       // Audio
       case 'response.audio.delta':
       case 'response.output_audio.delta':
-        this.isSpeaking = true; // El AI está hablando, bloquear input micrófono
+        if (this.isInterrupted) {
+          // Ignorar audio si el usuario interrumpió
+          return;
+        }
         this.logger.debug('🔊 Audio delta recibido');
         if (event.delta) {
           const audioBuffer = Buffer.from(event.delta, 'base64');
@@ -381,7 +383,6 @@ export class ConciergeClientService {
 
       case 'response.audio.done':
       case 'response.output_audio.done':
-        this.isSpeaking = false; // El AI terminó de hablar, desbloquear input
         this.logger.log('✅ Audio completo recibido');
         this.audioDoneHandlers.forEach(handler => handler());
         break;
@@ -399,8 +400,15 @@ export class ConciergeClientService {
       // VAD
       case 'input_audio_buffer.speech_started':
         this.logger.log('🎙️ Detectado inicio de habla del usuario');
-        // Barge-in desactivado. No hacemos nada aquí.
-        // Si isSpeaking es true, el audio del usuario ya debería haber sido bloqueado en sendAudio
+        
+        // Barge-in ACTIVADO: 
+        // 1. Marcamos interrupción para ignorar paquetes de audio antiguos
+        // 2. Notificamos handlers (AudioManager hará kill del proceso)
+        // 3. Cancelamos respuesta en servidor
+        
+        this.isInterrupted = true;
+        this.speechStartedHandlers.forEach(handler => handler());
+        this.sendEvent({ type: 'response.cancel' }); 
         break;
 
       case 'input_audio_buffer.speech_stopped':
@@ -665,13 +673,6 @@ REGLAS IMPORTANTES:
    */
   sendAudio(audioBuffer: Buffer): void {
     if (!this.conversationActive || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      return;
-    }
-
-    // Half-Duplex: Si el AI está hablando, ignorar el micrófono para evitar eco/interrupciones
-    if (this.isSpeaking) {
-      // Opcional: Log debug
-      // this.logger.debug('🙊 Ignorando audio (AI hablando)');
       return;
     }
 
