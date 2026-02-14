@@ -19,8 +19,8 @@ export class ConciergeClientService {
   private audioHandlers: ((audioBuffer: Buffer) => void)[] = [];
   private targetHouse: string | null = null;
   
-  // Configuración del modelo Realtime
-  private readonly REALTIME_MODEL = 'gpt-realtime-mini';
+  // Configuración del modelo Realtime (versión GA estable)
+  private readonly REALTIME_MODEL = 'gpt-realtime-mini-2025-12-15';
   private readonly REALTIME_WS_URL = 'wss://api.openai.com/v1/realtime';
 
   constructor(
