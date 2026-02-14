@@ -141,7 +141,8 @@ export class ConciergeClientService {
               rate: 24000
             },
             transcription: {
-              model: 'whisper-1',
+              // Usamos el modelo optimizado para Realtime Mini para asegurar compatibilidad
+              model: 'whisper-1', 
               language: 'es'
             },
             turn_detection: {
