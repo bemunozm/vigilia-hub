@@ -61,13 +61,16 @@ export class AudioRouterService {
 
   /**
    * Escanea el teclado continuamente
+   * MODO PRUEBA: Detecta señal en GPIO 26 y marca casa "15" automáticamente
    */
   private startKeypadScanning(): void {
     this.scanInterval = setInterval(async () => {
-      const key = await this.gpioController.scanKeypad();
+      // MODO PRUEBA: En lugar de escanear multiplexor, detectar GPIO 26 directamente
+      const signalDetected = this.gpioController.isSignalActive();
       
-      if (key) {
-        this.handleKeyPress(key);
+      if (signalDetected && this.state === AudioState.TRANSPARENT) {
+        this.logger.log('🔔 Señal detectada en GPIO 26 - Marcando casa 15 (modo prueba)');
+        await this.processHouseNumberDirect('15');
       }
     }, this.SCAN_INTERVAL_MS);
   }
@@ -121,7 +124,14 @@ export class AudioRouterService {
    */
   private async processHouseNumber(): Promise<void> {
     const houseNumber = this.keypadBuffer.trim();
-    
+    this.clearKeypadBuffer();
+    await this.processHouseNumberDirect(houseNumber);
+  }
+
+  /**
+   * Método público para pruebas: procesa marcación sin keypad físico
+   */
+  public async processHouseNumberDirect(houseNumber: string): Promise<void> {
     if (!houseNumber) {
       this.returnToTransparent();
       return;
@@ -146,8 +156,6 @@ export class AudioRouterService {
       await this.relayController.disableInterception();
       this.returnToTransparent();
     }
-
-    this.clearKeypadBuffer();
   }
 
   /**

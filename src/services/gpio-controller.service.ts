@@ -76,6 +76,21 @@ export class GPIOControllerService {
   }
 
   /**
+   * Modo prueba: Lee directamente el GPIO 26 sin multiplexor
+   */
+  isSignalActive(): boolean {
+    if (!this.isAvailable || !this.muxSignalPin) {
+      return false;
+    }
+    
+    try {
+      return this.muxSignalPin.readSync() === 1;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
    * Delay helper
    */
   private sleep(ms: number): Promise<void> {
