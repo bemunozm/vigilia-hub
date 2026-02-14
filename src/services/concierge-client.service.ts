@@ -135,9 +135,9 @@ export class ConciergeClientService {
         // Estructura anidada 'audio' siguiendo RealtimeAudioConfig
         audio: {
           input: {
-            // El formato debe ser un objeto con type y rate (24000)
+            // El formato debe ser un objeto con type 'audio/pcm' y rate 24000
             format: { 
-              type: 'pcm16',
+              type: 'audio/pcm',
               rate: 24000
             },
             transcription: {
@@ -154,7 +154,7 @@ export class ConciergeClientService {
           output: {
             // El formato de salida también debe ser objeto
             format: { 
-              type: 'pcm16',
+              type: 'audio/pcm',
               rate: 24000
             },
             voice: 'sage'
