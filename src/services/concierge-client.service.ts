@@ -132,11 +132,14 @@ export class ConciergeClientService {
         
         instructions: this.getSystemInstructions(),
         
-        // Estructura anidada 'audio' requerida por versiones recientes (RealtimeSession)
-        // en lugar de parámetros planos que son rechazados.
+        // Estructura anidada 'audio' siguiendo RealtimeAudioConfig
         audio: {
           input: {
-            format: 'pcm16',
+            // El formato debe ser un objeto con type y rate (24000)
+            format: { 
+              type: 'pcm16',
+              rate: 24000
+            },
             transcription: {
               model: 'whisper-1'
             },
@@ -149,7 +152,11 @@ export class ConciergeClientService {
             }
           },
           output: {
-            format: 'pcm16',
+            // El formato de salida también debe ser objeto
+            format: { 
+              type: 'pcm16',
+              rate: 24000
+            },
             voice: 'sage'
           }
         },
