@@ -110,28 +110,29 @@ export class ConciergeClientService {
     }
 
     // Configuración de sesión según documentación oficial
-    // ESTRATEGIA DEBUG: Configuración mínima para aislar el error "session.type"
+    // ESTRATEGIA DEBUG: Agregar type='realtime' aunque no debiera ser necesario para update, por si acaso es el param faltante.
     const sessionConfig = {
       type: 'session.update',
       session: {
-        modalities: ['audio', 'text'], // Orden estándar
+        // Parametros requeridos (?)
+        type: 'realtime', // Intentando satisfacer el error 'missing_required_parameter: session.type'
+        
+        modalities: ['audio', 'text'],
         instructions: this.getSystemInstructions(),
         voice: 'sage',
         input_audio_format: 'pcm16',
         output_audio_format: 'pcm16',
         
-        // Re-habilitamos transcripción explícitamente (es necesaria para modelos recientes)
         input_audio_transcription: {
            model: 'whisper-1' 
         },
 
-        // Turn detection explícito
         turn_detection: {
           type: 'server_vad',
           threshold: 0.5,
           prefix_padding_ms: 300,
           silence_duration_ms: 500,
-          create_response: true 
+          create_response: true
         },
         
         tools: this.getToolDefinitions(),
