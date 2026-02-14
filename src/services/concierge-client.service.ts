@@ -43,17 +43,28 @@ export class ConciergeClientService {
    */
   async connect(): Promise<void> {
     try {
-      this.logger.log('🎫 Solicitando token efímero al backend...');
-      
-      // Obtener token efímero y sessionId del backend
-      const response = await axios.post(`${this.backendUrl}/api/v1/concierge/session/start`, {
-        socketId: this.websocketClient.getSocketId(),
-      });
+      let ephemeralToken: string;
+      let sessionId: string;
 
-      const { sessionId, ephemeralToken } = response.data;
-      this.currentSessionId = sessionId;
+      // 🔍 DEBUG: Permitir uso directo de API Key para descartar problemas de tokens efímeros
+      if (process.env.DEBUG_OPENAI_KEY) {
+        this.logger.warn('⚠️ MODO DEBUG ACTIVADO: Usando API Key directa (Bypassing Backend) ⚠️');
+        ephemeralToken = process.env.DEBUG_OPENAI_KEY;
+        sessionId = `debug_${Date.now()}`;
+        this.currentSessionId = sessionId;
+      } else {
+        this.logger.log('🎫 Solicitando token efímero al backend...');
+        
+        // Obtener token efímero y sessionId del backend
+        const response = await axios.post(`${this.backendUrl}/api/v1/concierge/session/start`, {
+          socketId: this.websocketClient.getSocketId(),
+        });
 
-      this.logger.log(`✅ Token efímero obtenido. SessionId: ${sessionId}`);
+        ephemeralToken = response.data.ephemeralToken;
+        sessionId = response.data.sessionId;
+        this.currentSessionId = sessionId;
+        this.logger.log(`✅ Token efímero obtenido. SessionId: ${sessionId}`);
+      }
       
       this.logger.log('🤖 Conectando a OpenAI Realtime API via WebSocket...');
 
