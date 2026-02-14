@@ -123,6 +123,14 @@ export class AudioManagerService {
       '--buffer-time=50000'
     ]);
 
+    // Manejo robusto de errores en stdin para prevenir EPIPE crashes
+    this.playbackProcess.stdin?.on('error', (err: any) => {
+        // Ignorar EPIPE ya que es esperado si matamos el proceso (Barge-in)
+        if (err.code !== 'EPIPE') {
+            this.logger.warn(`Error en stdin de playback: ${err.message}`);
+        }
+    });
+
     this.playbackProcess.stderr?.on('data', (data) => {
       this.logger.debug(`aplay stderr: ${data}`);
     });
