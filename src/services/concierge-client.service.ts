@@ -392,10 +392,16 @@ Contexto técnico:
           content: [
             {
               type: 'input_text',
-              text: `[Contexto: Llamada desde citófono para casa ${houseNumber}]`
+              text: `[Contexto: Llamada desde citófono para casa ${houseNumber}. Saluda al visitante y pregunta su nombre y motivo de visita.]`
             }
           ]
         }
+      }));
+      
+      // Solicitar que la IA responda (inicie la conversación)
+      // Esto hace que la IA hable primero con un saludo
+      this.ws.send(JSON.stringify({
+        type: 'response.create'
       }));
     }
   }
