@@ -21,10 +21,10 @@ export class DTMFGeneratorService {
   private readonly TONE_DURATION_MS = 100;  // Duración de cada tono
   private readonly TONE_PAUSE_MS = 50;       // Pausa entre tonos
   private readonly SAMPLE_RATE = 48000;      // Sample rate del hardware
-  private readonly DEVICE_NAME: string;
+  private readonly AUDIO_DEVICE: string;
 
   constructor() {
-    this.DEVICE_NAME = process.env.AUDIO_DEVICE || 'hw:1,0';
+    this.AUDIO_DEVICE = process.env.AUDIO_DEVICE || 'plughw:CARD=Headphones,DEV=0';
   }
 
   /**
@@ -120,7 +120,7 @@ export class DTMFGeneratorService {
   private playDTMFFile(filePath: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const aplay = spawn('aplay', [
-        '-D', this.DEVICE_NAME,
+        '-D', this.AUDIO_DEVICE,
         '-f', 'S16_LE',
         '-c', '1',
         '-r', this.SAMPLE_RATE.toString(),

@@ -10,15 +10,19 @@ export class AudioManagerService {
   private readonly SAMPLE_RATE_CAPTURE: number;
   private readonly SAMPLE_RATE_OUTPUT: number;
   private readonly CHANNELS: number;
-  private readonly DEVICE_NAME: string;
+  private readonly AUDIO_DEVICE: string;  // Para reproducción (audífonos)
+  private readonly CAPTURE_DEVICE: string; // Para captura (micrófono)
 
   constructor() {
-    this.SAMPLE_RATE_CAPTURE = parseInt(process.env.AUDIO_SAMPLE_RATE_CAPTURE || '48000', 10);
-    this.SAMPLE_RATE_OUTPUT = parseInt(process.env.AUDIO_SAMPLE_RATE_OUTPUT || '24000', 10);
+    this.SAMPLE_RATE_CAPTURE = parseInt(process.env.SAMPLE_RATE || '48000', 10);
+    this.SAMPLE_RATE_OUTPUT = parseInt(process.env.TARGET_SAMPLE_RATE || '24000', 10);
     this.CHANNELS = parseInt(process.env.AUDIO_CHANNELS || '1', 10);
-    this.DEVICE_NAME = process.env.AUDIO_DEVICE || 'hw:1,0';
+    this.AUDIO_DEVICE = process.env.AUDIO_DEVICE || 'plughw:CARD=Headphones,DEV=0';
+    this.CAPTURE_DEVICE = process.env.CAPTURE_DEVICE || 'plughw:CARD=Device,DEV=0';
 
-    this.logger.log(`✅ Audio Manager inicializado: ${this.DEVICE_NAME} @ ${this.SAMPLE_RATE_CAPTURE}Hz`);
+    this.logger.log(`✅ Audio Manager inicializado:`);
+    this.logger.log(`   📢 Reproducción: ${this.AUDIO_DEVICE} @ ${this.SAMPLE_RATE_CAPTURE}Hz`);
+    this.logger.log(`   🎤 Captura: ${this.CAPTURE_DEVICE} @ ${this.SAMPLE_RATE_CAPTURE}Hz → ${this.SAMPLE_RATE_OUTPUT}Hz`);
   }
 
   /**
@@ -36,7 +40,7 @@ export class AudioManagerService {
     // arecord con downsample usando sox (alternativa a librería)
     // Captura en formato raw PCM16 mono
     this.captureProcess = spawn('arecord', [
-      '-D', this.DEVICE_NAME,
+      '-D', this.CAPTURE_DEVICE, // Usar CAPTURE_DEVICE (micrófono USB)
       '-f', 'S16_LE',
       '-c', this.CHANNELS.toString(),
       '-r', this.SAMPLE_RATE_CAPTURE.toString(),
@@ -111,7 +115,7 @@ export class AudioManagerService {
 
     // aplay reproduciendo PCM16 mono a 24kHz
     this.playbackProcess = spawn('aplay', [
-      '-D', this.DEVICE_NAME,
+      '-D', this.AUDIO_DEVICE, // Usar AUDIO_DEVICE (audífonos)
       '-f', 'S16_LE',
       '-c', this.CHANNELS.toString(),
       '-r', this.SAMPLE_RATE_OUTPUT.toString(),
