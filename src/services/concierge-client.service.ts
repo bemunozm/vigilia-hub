@@ -127,8 +127,12 @@ export class ConciergeClientService {
         // Pero "output_modalities": ["audio"] es el default y function calling funciona con audio inputs.
         // Vamos a probar SIN este campo para asegurar que session.update pase sin error.
         
+        // NOTA: Eliminamos 'voice' temporalmente porque lanza "Unknown parameter".
+        // Usaremos la voz por defecto ('alloy') por ahora para asegurar conexión.
+        
         instructions: this.getSystemInstructions(),
-        voice: 'sage',
+        // voice: 'sage', // CAUSA ERROR: Unknown parameter: 'session.voice'
+        
         input_audio_format: 'pcm16',
         output_audio_format: 'pcm16',
         
