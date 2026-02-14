@@ -111,6 +111,7 @@ export class ConciergeClientService {
     const sessionConfig = {
       type: 'session.update' as const,
       session: {
+        type: 'realtime' as const, // Requerido por el tipo del SDK
         output_modalities: ['audio'] as ('audio' | 'text')[], // Solo audio para citófono
         turn_detection: {
           type: 'semantic_vad' as const,
