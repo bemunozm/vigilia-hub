@@ -147,6 +147,21 @@ export class AudioManagerService {
   }
 
   /**
+   * Interrumpe la reproducción actual (útil para barge-in)
+   * Mata el proceso actual (limpiando buffer) y reinicia uno nuevo
+   */
+  interruptPlayback(): void {
+    if (this.playbackProcess) {
+      this.logger.log('🛑 Interrumpiendo reproducción actual (Barge-in)');
+      // Matar proceso forcefuly para vaciar buffer de hardware
+      this.playbackProcess.kill('SIGKILL'); 
+      this.playbackProcess = null;
+    }
+    // Reiniciar inmediatamente
+    this.startPlayback();
+  }
+
+  /**
    * Escribe datos de audio al proceso de playback
    */
   writePlayback(audioData: Buffer): void {

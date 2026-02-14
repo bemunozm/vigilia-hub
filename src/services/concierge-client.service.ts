@@ -18,6 +18,7 @@ export class ConciergeClientService {
   private backendUrl: string;
   private audioHandlers: ((audioBuffer: Buffer) => void)[] = [];
   private audioDoneHandlers: (() => void)[] = [];
+  private speechStartedHandlers: (() => void)[] = [];
   private targetHouse: string | null = null;
   
   // Configuración del modelo Realtime (versión GA estable)
@@ -393,6 +394,11 @@ export class ConciergeClientService {
       // VAD
       case 'input_audio_buffer.speech_started':
         this.logger.log('🎙️ Detectado inicio de habla del usuario');
+        // Notificar listeners para interrupción (barge-in)
+        this.speechStartedHandlers.forEach(handler => handler());
+        
+        // Opcional: Cancelar respuesta actual en el servidor si no lo hace automático
+        // this.sendEvent({ type: 'response.cancel' }); 
         break;
 
       case 'input_audio_buffer.speech_stopped':
@@ -700,6 +706,13 @@ REGLAS IMPORTANTES:
    */
   onAudioResponseDone(handler: () => void): void {
     this.audioDoneHandlers.push(handler);
+  }
+
+  /**
+   * Registra un handler para cuando el usuario empieza a hablar (interrupción)
+   */
+  onSpeechStarted(handler: () => void): void {
+    this.speechStartedHandlers.push(handler);
   }
 
   /**

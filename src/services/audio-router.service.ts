@@ -333,6 +333,13 @@ export class AudioRouterService {
         this.echoSuppression.notifySpeakerInactive();
       }, 500);
     });
+
+    // Manejar interrupción (Barge-in): Cuando usuario habla, cortar audio actual
+    this.conciergeClient.onSpeechStarted(() => {
+        this.logger.log('🛑 Usuario interrumpió - Cortando playback');
+        this.audioManager.interruptPlayback();
+        this.echoSuppression.notifySpeakerInactive(); // Rehabilitar mic inmediatamente (aunque debería estarlo)
+    });
   }
 
   /**
