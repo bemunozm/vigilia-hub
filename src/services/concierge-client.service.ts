@@ -10,10 +10,6 @@ import { WebSocketClientService } from './websocket-client.service';
  * 
  * Implementación: WebSocket manual (método oficial para Node.js server-to-server)
  * Referencia: https://developers.openai.com/api/docs/guides/realtime-websocket
- * 
- * Nota: @openai/agents/realtime es solo para navegadores (WebRTC).
- * El SDK openai@4.x no tiene soporte completo para Realtime API WebSocket,
- * por eso usamos WebSocket manual como indica la documentación oficial.
  */
 export class ConciergeClientService {
   private readonly logger = new Logger(ConciergeClientService.name);
@@ -24,8 +20,7 @@ export class ConciergeClientService {
   private backendUrl: string;
   private audioHandlers: ((audioBuffer: Buffer) => void)[] = [];
   
-  // Configuración del modelo Realtime GA (https://developers.openai.com/api/docs/guides/realtime-websocket)
-  // Usar 'gpt-realtime' que mapea a gpt-realtime-mini (GA modelo económico)
+  // Configuración del modelo Realtime GA
   private readonly REALTIME_MODEL = 'gpt-realtime';
 
   constructor(
@@ -284,10 +279,27 @@ Contexto técnico:
    * Procesa eventos de OpenAI
    */
   private async handleEvent(event: any): Promise<void> {
+    // Log ALL events for debugging
+    if (event.type !== 'response.audio.delta') { // No logear cada chunk de audio
+      this.logger.debug(`📥 Evento recibido: ${event.type}`);
+    }
+    
     switch (event.type) {
       case 'session.created':
         this.currentSessionId = event.session.id;
         this.logger.log(`📝 Sesión creada: ${this.currentSessionId}`);
+        break;
+
+      case 'session.updated':
+        this.logger.log('✅ Sesión actualizada correctamente');
+        break;
+
+      case 'response.created':
+        this.logger.log(`🎬 Respuesta iniciada: ${event.response?.id}`);
+        break;
+
+      case 'response.output_item.added':
+        this.logger.log(`📝 Item agregado: ${event.item?.type}`);
         break;
 
       case 'response.audio.delta':
@@ -296,6 +308,14 @@ Contexto técnico:
           const audioBuffer = Buffer.from(event.delta, 'base64');
           this.audioHandlers.forEach(handler => handler(audioBuffer));
         }
+        break;
+
+      case 'response.audio.done':
+        this.logger.log('✅ Audio completo recibido');
+        break;
+
+      case 'response.done':
+        this.logger.log(`✅ Respuesta completa: ${event.response?.id}`);
         break;
 
       case 'conversation.item.input_audio_transcription.completed':
@@ -310,12 +330,27 @@ Contexto técnico:
         await this.handleToolCall(event);
         break;
 
+      case 'input_audio_buffer.speech_started':
+        this.logger.log('🎙️ Detectado inicio de habla del usuario');
+        break;
+
+      case 'input_audio_buffer.speech_stopped':
+        this.logger.log('🎙️ Detectado fin de habla del usuario');
+        break;
+
       case 'error':
         this.logger.error('❌ Error de OpenAI:');
         this.logger.error(`   Tipo: ${event.type}`);
         this.logger.error(`   Código: ${event.error?.code || 'N/A'}`);
         this.logger.error(`   Mensaje: ${event.error?.message || 'N/A'}`);
         this.logger.error(`   Evento completo: ${JSON.stringify(event, null, 2)}`);
+        break;
+
+      default:
+        // Log other events for discovery
+        if (!event.type.includes('delta')) {
+          this.logger.debug(`📥 Evento no manejado: ${event.type}`);
+        }
         break;
     }
   }
