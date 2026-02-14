@@ -110,29 +110,18 @@ export class ConciergeClientService {
     }
 
     // Configuración de sesión según documentación oficial
-    // https://platform.openai.com/docs/api-reference/realtime-client-events/session-update
+    // NOTA IMPOTANTE: Se han simplificado parámetros para evitar "missing_required_parameter: session.type"
     const sessionConfig = {
       type: 'session.update',
       session: {
-        // Modalidades (text + audio para permitir function calling y respuesta de voz)
         modalities: ['text', 'audio'],
-        
-        // Instrucciones del sistema
         instructions: this.getSystemInstructions(),
-        
-        // Voz del asistente
         voice: 'sage',
-
-        // Formatos de audio (Strings simples, no objetos)
         input_audio_format: 'pcm16',
         output_audio_format: 'pcm16',
         
-        // Configuración de transcripción (Top-level en session)
-        input_audio_transcription: {
-          model: 'whisper-1'
-        },
+        // input_audio_transcription: { model: 'whisper-1' }, // Comentado temporalmente por sospecha de error
         
-        // Detección de turnos (Top-level en session)
         turn_detection: {
           type: 'server_vad',
           threshold: 0.5,
@@ -140,7 +129,6 @@ export class ConciergeClientService {
           silence_duration_ms: 500
         },
         
-        // Herramientas disponibles
         tools: this.getToolDefinitions(),
         tool_choice: 'auto'
       }
