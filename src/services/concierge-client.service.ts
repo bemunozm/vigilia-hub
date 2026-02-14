@@ -111,11 +111,7 @@ export class ConciergeClientService {
     const sessionConfig = {
       type: 'session.update' as const,
       session: {
-        type: 'realtime' as const,
-        model: 'gpt-realtime' as const,
         output_modalities: ['audio'] as ('audio' | 'text')[], // Solo audio para citófono
-        input_audio_format: 'pcm16' as const,
-        output_audio_format: 'pcm16' as const,
         turn_detection: {
           type: 'semantic_vad' as const,
         },
