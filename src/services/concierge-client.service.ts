@@ -124,10 +124,11 @@ export class ConciergeClientService {
         // Configuración de Audio (Estructura anidada para session.update)
         audio: {
           input: {
-            // Formato de audio de entrada (requerido para PCM16)
-            // NOTA: Se usa 'as any' porque los tipos del SDK esperan un objeto RealtimeAudioFormats
-            // pero la API WebSocket requiere el string 'pcm16'.
-            format: 'pcm16' as any,
+            // Formato de audio de entrada PCM 24kHz (estructura de objeto requerida por GA API)
+            format: {
+              type: 'audio/pcm' as const,
+              rate: 24000 as const
+            },
             transcription: {
               model: 'whisper-1' as const,
             },
@@ -140,8 +141,11 @@ export class ConciergeClientService {
             }
           },
           output: {
-            // Formato de audio de salida (requerido para PCM16)
-            format: 'pcm16' as any,
+            // Formato de audio de salida PCM 24kHz
+            format: {
+              type: 'audio/pcm' as const,
+              rate: 24000 as const
+            },
             voice: 'sage',
           }
         }
