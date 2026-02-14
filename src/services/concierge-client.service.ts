@@ -399,16 +399,16 @@ export class ConciergeClientService {
 
       // VAD
       case 'input_audio_buffer.speech_started':
-        this.logger.log('🎙️ Detectado inicio de habla del usuario');
+        this.logger.log('🎙️ Detectado inicio de habla del usuario (No interrumpir)');
         
-        // Marcar como interrumpido para detener el flujo de audio localmente
-        this.isInterrupted = true;
+        // Barge-in desactivado por solicitud: 
+        // No marcamos isInterrupted = true
+        // No cancelamos la respuesta
+        // No notificamos a los handlers que detendrían el playback
         
-        // Notificar listeners para interrupción (barge-in) -> Mata el proceso de audio
-        this.speechStartedHandlers.forEach(handler => handler());
-        
-        // Cancelar respuesta actual en el servidor para ahorrar tokens y ancho de banda
-        this.sendEvent({ type: 'response.cancel' }); 
+        // this.isInterrupted = true;
+        // this.speechStartedHandlers.forEach(handler => handler());
+        // this.sendEvent({ type: 'response.cancel' }); 
         break;
 
       case 'input_audio_buffer.speech_stopped':

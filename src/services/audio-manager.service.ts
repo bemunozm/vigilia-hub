@@ -165,15 +165,25 @@ export class AudioManagerService {
    * Escribe datos de audio al proceso de playback
    */
   writePlayback(audioData: Buffer): void {
+    // Verificación robusta antes de escribir
+    if (!this.playbackProcess || 
+        !this.playbackProcess.stdin || 
+        this.playbackProcess.stdin.destroyed || 
+        !this.playbackProcess.stdin.writable) {
+      // Opcional: Log debug, pero evitando spam
+      // this.logger.debug('Intento de escritura en stream cerrado o no válido');
+      return;
+    }
+
     try {
-      if (this.playbackProcess?.stdin?.writable) {
-        this.playbackProcess.stdin.write(audioData, (error) => {
-          if (error) {
-            this.logger.debug(`Error escribiendo audio (callback): ${error.message}`);
-          }
-        });
-      }
+      this.playbackProcess.stdin.write(audioData, (error) => {
+        if (error) {
+          // Capturar EPIPE asíncrono y otros errores de escritura
+          this.logger.debug(`Error callback escribiendo audio: ${error.message}`);
+        }
+      });
     } catch (error) {
+      // Capturar errores síncronos
       this.logger.debug(`Excepción escribiendo audio: ${error instanceof Error ? error.message : 'Unknown'}`);
     }
   }
