@@ -107,36 +107,28 @@ export class ConciergeClientService {
       return;
     }
 
-    // Configurar sesión usando el SDK
-    this.realtimeSession.send({
+    // Configurar sesión usando el SDK con formato GA correcto
+    const sessionConfig = {
       type: 'session.update',
       session: {
         type: 'realtime',
         model: 'gpt-realtime',
         output_modalities: ['audio'], // Solo audio para citófono
-        audio: {
-          input: {
-            format: {
-              type: 'audio/pcm',
-              rate: 24000, // 24kHz según configuración
-            },
-            turn_detection: {
-              type: 'semantic_vad', // VAD semántico
-            },
-          },
-          output: {
-            format: {
-              type: 'audio/pcm',
-              rate: 24000,
-            },
-            voice: 'sage',
-          },
+        input_audio_format: 'pcm16',  // Formato simplificado GA
+        output_audio_format: 'pcm16', // Formato simplificado GA
+        input_audio_transcription: null, // Opcional: deshabilitar transcripción si no la necesitamos
+        turn_detection: {
+          type: 'semantic_vad',
         },
+        voice: 'sage',
         instructions: this.getSystemInstructions(),
         tools: this.getToolDefinitions(),
         tool_choice: 'auto',
       }
-    });
+    };
+
+    this.logger.log('📤 Enviando configuración:', JSON.stringify(sessionConfig, null, 2));
+    this.realtimeSession.send(sessionConfig);
 
     this.logger.log('📋 Sesión de OpenAI configurada exitosamente');
   }
@@ -286,11 +278,40 @@ Contexto técnico:
 
     // Item agregado
     this.realtimeSession.on('response.content_part.added', (event: any) => {
-      this.logger.log(`📝 Item agregado: ${event.part?.type}`);
+      this.logger.log(`📝 Content part agregado: ${event.part?.type}`);
+      this.logger.log('Part:', JSON.stringify(event.part, null, 2));
     });
 
-    // Audio delta (chunks de audio PCM)
+    // Output item agregado
+    this.realtimeSession.on('response.output_item.added', (event: any) => {
+      this.logger.log(`📝 Output item agregado: ${event.item?.type}`);
+      this.logger.log('Item:', JSON.stringify(event.item, null, 2));
+    });
+
+    // Output item completado
+    this.realtimeSession.on('response.output_item.done', (event: any) => {
+      this.logger.log(`✅ Output item completado: ${event.item?.type}`);
+    });
+
+    // TODOS los posibles eventos de audio (probar variantes)
     this.realtimeSession.on('response.output_audio.delta', (event: any) => {
+      this.logger.log('🔊 Audio delta recibido (output_audio)');
+      if (event.delta) {
+        const audioBuffer = Buffer.from(event.delta, 'base64');
+        this.audioHandlers.forEach(handler => handler(audioBuffer));
+      }
+    });
+
+    this.realtimeSession.on('response.audio.delta', (event: any) => {
+      this.logger.log('🔊 Audio delta recibido (audio)');
+      if (event.delta) {
+        const audioBuffer = Buffer.from(event.delta, 'base64');
+        this.audioHandlers.forEach(handler => handler(audioBuffer));
+      }
+    });
+
+    this.realtimeSession.on('response.audio_transcript.delta', (event: any) => {
+      this.logger.log('🔊 Audio delta recibido (audio_transcript)');
       if (event.delta) {
         const audioBuffer = Buffer.from(event.delta, 'base64');
         this.audioHandlers.forEach(handler => handler(audioBuffer));
@@ -416,9 +437,13 @@ Contexto técnico:
         }
       });
       
-      // Solicitar respuesta de la IA
+      // Solicitar respuesta de la IA con configuración explícita de audio
+      this.logger.log('📤 Solicitando respuesta con audio...');
       this.realtimeSession.send({
-        type: 'response.create'
+        type: 'response.create',
+        response: {
+          modalities: ['audio'],  // Asegurar que responda con audio
+        }
       });
     }
   }
