@@ -164,7 +164,8 @@ export class ConciergeClientService {
               threshold: 0.5,
               prefix_padding_ms: 300,
               silence_duration_ms: 500,
-              create_response: true
+              create_response: true,
+              interrupt_response: true // Que el servidor cancele automáticamente
             }
           },
           output: {
@@ -401,14 +402,13 @@ export class ConciergeClientService {
       case 'input_audio_buffer.speech_started':
         this.logger.log('🎙️ Detectado inicio de habla del usuario');
         
-        // Barge-in ACTIVADO: 
-        // 1. Marcamos interrupción para ignorar paquetes de audio antiguos
-        // 2. Notificamos handlers (AudioManager hará kill del proceso)
-        // 3. Cancelamos respuesta en servidor
+        // Barge-in: 
+        // 1. Marcamos interrupción para ignorar paquetes "en vuelo"
+        // 2. Notificamos handlers para limpiar el buffer de audio local (aplay)
+        // NOTA: No enviamos response.cancel manual porque interrupt_response: true lo hace en el servidor
         
         this.isInterrupted = true;
         this.speechStartedHandlers.forEach(handler => handler());
-        this.sendEvent({ type: 'response.cancel' }); 
         break;
 
       case 'input_audio_buffer.speech_stopped':
@@ -430,13 +430,7 @@ export class ConciergeClientService {
 
       // Errores
       case 'error':
-        // Ignorar error de cancelación si no hay respuesta activa (común en interrupciones rápidas)
-        if (event.error?.code === 'response_cancel_not_active') {
-          this.logger.debug('ℹ️ Aviso: Cancelación enviada sin respuesta activa (ignorable)');
-          return;
-        }
-
-        // Log detallado de CUALQUIER otro error
+        // Log detallado de CUALQUIER error
         this.logger.error('❌ Error de OpenAI (Detalle Completo):', JSON.stringify(event, null, 2));
         if (event.error?.code) {
              this.logger.error(`Error Code: ${event.error.code} - Message: ${event.error.message}`);
