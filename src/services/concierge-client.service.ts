@@ -107,22 +107,41 @@ export class ConciergeClientService {
       return;
     }
 
-    // Configurar sesión usando el SDK con formato GA correcto
+    // Configurar sesión usando el SDK oficial (Estructura Anidada según definiciones de RealtimeSessionCreateRequest en realtime.d.ts)
     const sessionConfig = {
       type: 'session.update' as const,
       session: {
+        // Requerido por la definición RealtimeSessionCreateRequest
         type: 'realtime' as const,
-        output_modalities: ['audio'] as ('audio' | 'text')[],
+        
+        // Modalidades de salida (output_modalities según interfaz)
+        output_modalities: ['audio', 'text'] as ('audio' | 'text')[],
+        
         instructions: this.getSystemInstructions(),
         tools: this.getToolDefinitions(),
         tool_choice: 'auto' as const,
+        
+        // Configuración de Audio (Estructura anidada para session.update)
         audio: {
           input: {
+            // Formato de audio de entrada (requerido para PCM16)
+            // NOTA: Se usa 'as any' porque los tipos del SDK esperan un objeto RealtimeAudioFormats
+            // pero la API WebSocket requiere el string 'pcm16'.
+            format: 'pcm16' as any,
             transcription: {
               model: 'whisper-1' as const,
+            },
+            // VAD (Server VAD) para detección automática de turnos
+            turn_detection: {
+              type: 'server_vad' as const,
+              threshold: 0.5,
+              prefix_padding_ms: 300,
+              silence_duration_ms: 500
             }
           },
           output: {
+            // Formato de audio de salida (requerido para PCM16)
+            format: 'pcm16' as any,
             voice: 'sage',
           }
         }
