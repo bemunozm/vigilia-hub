@@ -134,7 +134,7 @@ export class AudioRouterService {
 
   /**
    * Procesa el número de casa marcado
-   * CORREGIDO: Verifica PRIMERO si tiene IA antes de interceptar
+   * HAPPY PATH: Interceptar SIEMPRE primero, luego decidir camino
    */
   private async processHouseNumber(): Promise<void> {
     const houseNumber = this.keypadBuffer.trim();
@@ -144,6 +144,7 @@ export class AudioRouterService {
 
   /**
    * Método público para pruebas: procesa marcación sin keypad físico
+   * FLUJO: Interceptar SIEMPRE primero (evitar latencia), luego decidir
    */
   public async processHouseNumberDirect(houseNumber: string): Promise<void> {
     if (!houseNumber) {
@@ -153,20 +154,24 @@ export class AudioRouterService {
 
     this.logger.log(`🏠 Casa marcada: ${houseNumber}`);
 
-    // PASO 1: Verificar PRIMERO si tiene IA (decisión instantánea usando cache)
-    const shouldIntercept = this.localCache.shouldInterceptCall(houseNumber);
+    // PASO 1: INTERCEPTAR SEÑAL INMEDIATAMENTE (evita que suene citófono durante decisión)
+    this.logger.log(`⚡ Interceptando señal para evaluar (evitar latencia)...`);
+    await this.relayController.enableInterception();
 
-    if (!shouldIntercept) {
-      // Casa SIN IA: Citófono analógico funciona normal
-      this.logger.log(`📞 Casa sin IA - Citófono GT funcionando en modo transparente`);
-      // NO interceptar, mantener relés OFF
-      // La llamada pasa directamente al teléfono del departamento
+    // PASO 2: Decisión rápida (<50ms) usando caché local
+    const shouldUseAI = this.localCache.shouldInterceptCall(houseNumber);
+
+    if (!shouldUseAI) {
+      // Casa SIN IA: Liberar relés y dejar pasar llamada al citófono GT normal
+      this.logger.log(`📞 Casa sin IA - Liberando señal para citófono GT analógico`);
+      await this.relayController.disableInterception();
+      this.returnToTransparent();
+      // La llamada ahora pasa al teléfono del departamento hasta que cuelguen
       return;
     }
 
-    // PASO 2: Casa CON IA → Interceptar señal y continuar con IA
-    this.logger.log(`🤖 Casa con IA habilitada - Interceptando para Conserje Digital`);
-    await this.relayController.enableInterception();
+    // PASO 3: Casa CON IA → Mantener interceptado y activar Conserje Digital
+    this.logger.log(`🤖 Casa con IA - Iniciando Conserje Digital`);
     await this.continueAIInterceptState(houseNumber);
   }
 
