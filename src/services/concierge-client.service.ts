@@ -23,6 +23,7 @@ export class ConciergeClientService {
   private targetHouse: string | null = null;
   private isInterrupted = false;
   private isResponseActive = false; // <-- NUEVO: Para saber si vale la pena cancelar
+  private waitingTimeout: NodeJS.Timeout | null = null; // <-- NUEVO: Para tiempos muertos
   
   // Configuración del modelo Realtime (versión GA estable)
   private readonly REALTIME_MODEL = 'gpt-realtime-mini-2025-12-15';
@@ -127,6 +128,8 @@ export class ConciergeClientService {
       this.websocketClient.onEvent(eventName, (data: any) => {
           this.logger.log(`🔔 Evento de residente recibido! Decisión: ${data.approved ? 'APROBADA' : 'RECHAZADA'}`);
           
+          this.clearWaitingTimeout(); // Detener temporizador si contesta
+
           if (!this.conversationActive) {
              this.logger.warn('Se recibió la decisión, pero la conversación ya había terminado.');
              return;
@@ -313,6 +316,15 @@ export class ConciergeClientService {
         type: 'function',
         name: 'finalizar_llamada',
         description: 'Finaliza la llamada con el visitante. Usa esta herramienta SOLO después de despedirte completamente. NO menciones que estás finalizando la llamada, solo despídete naturalmente.',
+        parameters: {
+          type: 'object',
+          properties: {}
+        }
+      },
+      {
+        type: 'function',
+        name: 'reenviar_notificacion',
+        description: 'Vuelve a enviar la notificación al teléfono de los residentes si se han demorado mucho en contestar o si el visitante lo solicita. ÚSALA SOLO TRAS HABER HECHO LA PRIMERA NOTIFICACIÓN.',
         parameters: {
           type: 'object',
           properties: {}
@@ -527,6 +539,11 @@ export class ConciergeClientService {
           args,
           this.currentSessionId || 'unknown'
         );
+
+        // Si acaba de notificar, iniciar timer
+        if (name === 'notificar_residente') {
+          this.startWaitingTimeout();
+        }
       }
 
       // Enviar resultado de la herramienta
@@ -576,12 +593,13 @@ export class ConciergeClientService {
    * Genera instrucciones detalladas para una casa específica
    * Mismo prompt que en DigitalConciergeView.tsx
    */
-  private getDetailedInstructions(houseNumber: string): string {
+  private getDetailedInstructions(houseNumber: string, houseContext: string): string {
     return `Eres Sofía, la conserje del Condominio San Lorenzo. Eres amable, cálida y conversacional. Tu trabajo es ayudar a los visitantes a ingresar al condominio de manera eficiente pero siempre con una sonrisa en la voz.
 
 INFORMACIÓN INICIAL:
 - El visitante ya marcó la casa de destino: ${houseNumber}
 - YA conoces a dónde va, NO preguntes por la casa/departamento nuevamente
+- HISTORIAL DE VISITAS OBTENIDO DE LA BASE DE DATOS: ${houseContext}
 
 PERSONALIDAD:
 - Habla de manera natural y amigable, como si conversaras con un vecino
@@ -609,7 +627,9 @@ FLUJO Y PAUTAS DE CONVERSACIÓN (SÉ FLUIDA, RELAJADA Y 100% NATURAL):
    - Una vez tengas Nombre, RUT, y sepas si viene o no en vehículo junto con el motivo, avisa que contactarás a la casa (ej: "Súper, dame un segundito que llamo a la casa...").
 
 3. BÚSQUEDA Y NOTIFICACIÓN:
-   - En cuanto tengas la info básica, llama internamente buscar_residente(casa: "${houseNumber}")
+   - ATENCIÓN AL HISTORIAL: Si el visitante califica como visita PRE-APROBADA o VISITA FRECUENTE según el HISTORIAL provisto, trátalo con confianza (ej. "¡Hola [Nombre]! Te recuerdo.").
+   - Sáltate pedir documentos si ya tienes certeza de quién es por su nombre, simplemente llama directo a notificar_residente(residentes_ids) asumiendo los datos.
+   - En cuanto tengas la info básica (o confíes en el visitante por historial), llama internamente buscar_residente(casa: "${houseNumber}")
    - Si no existe: "Mmm... pucha, no me aparece nadie registrado en la casa ${houseNumber}. ¿Será ese el número correcto?"
    - Si existe (extraes TODOS los ids del array "residentes" y llamas notificar_residente(residentes_ids: ["id1", "id..."])):
      "Listo, les acabo de mandar un aviso a los residentes. Esperemos un ratito a que nos respondan."
@@ -635,7 +655,7 @@ REGLAS DE IDENTIDAD:
   /**
    * Inicia una conversación con el número de casa marcado
    */
-  startConversation(houseNumber: string): void {
+  async startConversation(houseNumber: string): Promise<void> {
     if (this.conversationActive) {
       this.logger.warn('Ya hay una conversación activa');
       return;
@@ -646,6 +666,16 @@ REGLAS DE IDENTIDAD:
     this.conversationActive = true;
     this.targetHouse = houseNumber;
     
+    let contextStr = 'Sin contexto histórico previo o fallo en obtenerlo.';
+    try {
+      this.logger.log('🔍 Consultando historial de visitantes a la casa...');
+      const response = await axios.post(`${this.backendUrl}/api/v1/concierge/context/${houseNumber}`);
+      contextStr = response.data.context;
+      this.logger.log(`✅ Historial inyectado en prompt: ${contextStr}`);
+    } catch (e) {
+      this.logger.warn('⚠️ No se pudo obtener el historial de visitas para el contexto.');
+    }
+
     // Agregar mensaje del sistema con contexto de la casa específica
     // Según documentación: usar conversation.item.create para updates mid-stream
     this.logger.log('📤 Agregando contexto de la casa al sistema...');
@@ -657,7 +687,7 @@ REGLAS DE IDENTIDAD:
         content: [
           {
             type: 'input_text',
-            text: this.getDetailedInstructions(houseNumber)
+            text: this.getDetailedInstructions(houseNumber, contextStr)
           }
         ]
       }
@@ -703,6 +733,8 @@ REGLAS DE IDENTIDAD:
     this.conversationActive = false;
     this.targetHouse = null;
     
+    this.clearWaitingTimeout(); // Detener temporizador si conversación termina por otra causa
+
     // Notificar a los suscriptores (ej. AudioRouter) para que apaguen sus flujos y relés
     this.conversationEndedHandlers.forEach(handler => handler());
 
@@ -788,5 +820,39 @@ REGLAS DE IDENTIDAD:
    */
   async cleanup(): Promise<void> {
     await this.disconnect();
+  }
+
+  // --- MÉTODOS DE PROACTIVIDAD ---
+  private startWaitingTimeout() {
+    this.clearWaitingTimeout();
+    this.logger.log('⏳ Iniciando timeout para demora del residente (30s)...');
+    
+    this.waitingTimeout = setTimeout(() => {
+       this.logger.warn('⏰ Residente demora en contestar. Pidiendo a IA que hable...');
+       if (this.conversationActive) {
+           this.sendEvent({
+              type: 'conversation.item.create',
+              item: {
+                  type: 'message',
+                  role: 'system',
+                  content: [
+                      {
+                          type: 'input_text',
+                          text: `ATENCIÓN: Han pasado 30 segundos y la APP del residente no ha contestado. Rompe el silencio de forma empática y natural: Dile al visitante que se están demorando un poquito, sugiérele amable y casualmente que los llame él por su teléfono (si tiene sus números), y confírmale que tú igual vas a reintentar notificar por el sistema. Llama INMEDIATAMENTE a la herramienta reenviar_notificacion() tras terminar de hablar para enviar un recordatorio al residente.`
+                      }
+                  ]
+              }
+           });
+           this.sendEvent({ type: 'response.create' });
+       }
+    }, 30000); // 30s de silencio sin respuesta
+  }
+
+  private clearWaitingTimeout() {
+     if (this.waitingTimeout) {
+        clearTimeout(this.waitingTimeout);
+        this.waitingTimeout = null;
+        this.logger.log('🛑 Temporizador de espera de residente detenido.');
+     }
   }
 }

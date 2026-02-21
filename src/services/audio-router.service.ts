@@ -280,7 +280,7 @@ export class AudioRouterService {
       await this.conciergeClient.connect();
       
       // 2. Iniciar conversación con contexto de casa
-      this.conciergeClient.startConversation(houseNumber);
+      await this.conciergeClient.startConversation(houseNumber);
       
       // 3. Configurar pipeline de audio
       this.setupAudioPipeline();
