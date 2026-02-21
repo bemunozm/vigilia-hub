@@ -71,53 +71,61 @@ export class GPIOControllerService {
    */
   async scanKeypad(): Promise<string | null> {
     if (!this.isAvailable) {
-      this.logger.debug('GPIO no disponible, skipping keypad scan');
       return null;
     }
     
-    let detectedKey: string | null = null;
+    let currentlyPressedKey: string | null = null;
     
     try {
-      // Pasamos columna por columna tirándola a LOW (0V)
+      // 1. Escanear matriz completa
       for (let c = 0; c < this.colGpios.length; c++) {
-        // Tiramos la columna a LOW
+        // Tirar columna a LOW
         this.colGpios[c].writeSync(0);
         
-        // Micro retardo para estabilización eléctrica (Sync)
-        for (let j = 0; j < 500; j++) {}
+        // Esperar estabilización
+        for (let j = 0; j < 50; j++) {}
 
-        // Leemos cada fila
+        // Leer filas
         for (let r = 0; r < this.rowGpios.length; r++) {
           if (this.rowGpios[r].readSync() === 0) {
-            const key = this.KEYPAD_MAP[r][c];
-            const now = Date.now();
-            
-            // Validar Debounce
-            if (key !== this.lastKeyPressed || (now - this.lastKeyTime) > this.DEBOUNCE_TIME_MS) {
-              this.lastKeyPressed = key;
-              this.lastKeyTime = now;
-              detectedKey = key;
-            }
+            currentlyPressedKey = this.KEYPAD_MAP[r][c];
           }
         }
 
-        // Devolvemos la columna a HIGH
+        // Subir columna a HIGH
         this.colGpios[c].writeSync(1);
         
-        if (detectedKey) {
-            break; // Si detectamos, cortamos el ciclo de columnas prematuramente
+        if (currentlyPressedKey) break;
+      }
+
+      // 2. Lógica de Flanco de Bajada (Solo registrar 1 vez por pulsación real)
+      const now = Date.now();
+      
+      if (currentlyPressedKey) {
+        // Si hay una tecla presionada AHORA
+        if (currentlyPressedKey !== this.lastKeyPressed) {
+           // ES UNA TECLA NUEVA (El dedo acaba de bajar)
+           // Registramos para no volver a emitirla hasta que suelte
+           this.lastKeyPressed = currentlyPressedKey;
+           this.lastKeyTime = now;
+           return currentlyPressedKey; // <-- Emitir al Router
+        } else {
+           // El dedo SIGUE apoyado en la misma tecla.
+           // No emitimos nada para evitar que marque "111111"
+           this.lastKeyTime = now; // Refrescar tiempo de toque
+           return null;
         }
+      } else {
+        // Ninguna tecla presionada AHORA
+        // Si pasó suficiente tiempo sin tocar nada (debounce de liberación), limpiar estado
+        if (this.lastKeyPressed !== null && (now - this.lastKeyTime) > 50) {
+          this.lastKeyPressed = null;
+        }
+        return null;
       }
-
-      // Si no detectamos nada, permitimos resetear la última tecla rápidamente
-      if (!detectedKey && (Date.now() - this.lastKeyTime) > 50) {
-        this.lastKeyPressed = null;
-      }
-
-      return detectedKey;
+      
     } catch (error) {
-      // Usar trace para no spamear console si hay error continuado de hardware
-      this.logger.debug(`Error escaneando teclado matricial: ${(error as any).message}`);
+       // Silenciar error en consola
     }
     
     return null;
