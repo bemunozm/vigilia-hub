@@ -34,7 +34,6 @@ export class AudioRouterService {
   private readonly COOLDOWN_MS: number;
   private readonly SCAN_INTERVAL_MS: number;
   private readonly MAX_CONVERSATION_TIME_MS: number;
-  private readonly DEBOUNCE_MS = 2000; // Evitar múltiples disparos
   
   private dtmfGenerator: DTMFGeneratorService;
 
@@ -48,7 +47,7 @@ export class AudioRouterService {
   ) {
     this.KEYPAD_TIMEOUT_MS = parseInt(process.env.KEYPAD_TIMEOUT_MS || '5000', 10);
     this.COOLDOWN_MS = parseInt(process.env.COOLDOWN_MS || '3000', 10);
-    this.SCAN_INTERVAL_MS = parseInt(process.env.SCAN_INTERVAL_MS || '100', 10);
+    this.SCAN_INTERVAL_MS = parseInt(process.env.SCAN_INTERVAL_MS || '30', 10); // Más frecuente (30ms) para detectar teclas rápidas
     this.MAX_CONVERSATION_TIME_MS = parseInt(process.env.MAX_CONVERSATION_TIME_MS || '180000', 10);
 
     this.dtmfGenerator = new DTMFGeneratorService();
@@ -99,19 +98,11 @@ export class AudioRouterService {
         return;
       }
 
-      // MODO PRUEBA: En lugar de escanear multiplexor, detectar GPIO 26 directamente
-      const signalDetected = this.gpioController.isSignalActive();
+      // Leer teclado matricial
+      const key = await this.gpioController.scanKeypad();
       
-      if (signalDetected) {
-        // Debounce: evitar múltiples disparos en 2 segundos
-        const now = Date.now();
-        if (now - this.lastSignalTime < this.DEBOUNCE_MS) {
-          return;
-        }
-        this.lastSignalTime = now;
-
-        this.logger.log('🔔 Señal detectada en GPIO 26 - Marcando casa 15 (modo prueba)');
-        await this.processHouseNumberDirect('15');
+      if (key !== null) {
+        this.handleKeyPress(key);
       }
     }, this.SCAN_INTERVAL_MS);
   }

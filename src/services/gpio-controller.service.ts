@@ -3,32 +3,49 @@ import { Logger } from '../utils/logger';
 
 export class GPIOControllerService {
   private readonly logger = new Logger(GPIOControllerService.name);
-  private muxControlPins: Gpio[] = [];
-  private muxSignalPin: Gpio | null = null;
+  
+  // Pines Directos Teclado 4x4
+  private readonly ROW_PINS = [5, 6, 13, 19];
+  private readonly COL_PINS = [26, 16, 20, 24];
+  
+  private rowGpios: Gpio[] = [];
+  private colGpios: Gpio[] = [];
   private hangupPin: Gpio | null = null; // GPIO para detectar colgar
   private isAvailable: boolean = false;
-  private keypadMap: { [key: string]: string } = {
-    '0': '0', '1': '1', '2': '2', '3': '3',
-    '4': '4', '5': '5', '6': '6', '7': '7',
-    '8': '8', '9': '9', '10': '*', '11': '#'
-  };
+  
+  // Mapa Matricial del Teclado
+  private readonly KEYPAD_MAP = [
+    ['1', '2', '3', 'A'],
+    ['4', '5', '6', 'B'],
+    ['7', '8', '9', 'C'],
+    ['*', '0', '#', 'D']
+  ];
+
+  // Variables para Debounce
+  private lastKeyPressed: string | null = null;
+  private lastKeyTime = 0;
+  private readonly DEBOUNCE_TIME_MS = 300; 
 
   constructor() {
     try {
-      // Pines de control del multiplexor (S0-S3)
-      this.muxControlPins = [5, 6, 13, 19].map(pin => new Gpio(pin, 'out'));
+      // 1. Inicializar Filas como ENTRADAS (con Pull-Up interno)
+      this.ROW_PINS.forEach(pin => {
+        this.rowGpios.push(new Gpio(pin, 'in', 'none', 'up')); // GpioWrapper (onoff) mapping: { mode: 'in', edge: 'none', pullUpDown: 'up' }
+      });
       
-      // Pin de señal del multiplexor (conectado a teclado)
-      // PUD_DOWN: sin señal = LOW, tecla presionada = HIGH
-      this.muxSignalPin = new Gpio(26, 'in', 'rising', 'down');
+      // 2. Inicializar Columnas como SALIDAS (por defecto HIGH)
+      this.COL_PINS.forEach(pin => {
+        const gpio = new Gpio(pin, 'out');
+        gpio.writeSync(1); // 3.3V
+        this.colGpios.push(gpio);
+      });
       
-      // Pin para detectar colgar (hook switch) - GPIO 22 (Pin 15)
-      // PUD_UP: sin hardware = HIGH (descolgado), pin a GND = LOW (colgado)
+      // 3. Pin para detectar colgar (hook switch)
       const hangupGpio = parseInt(process.env.HANGUP_GPIO || '22', 10);
       this.hangupPin = new Gpio(hangupGpio, 'in', 'both', 'up'); // Pull-up para hook switch
       
       this.isAvailable = true;
-      this.logger.log('✅ GPIO Multiplexor inicializado');
+      this.logger.log('✅ GPIO Teclado Matricial Directo inicializado');
       this.logger.log(`✅ GPIO Hangup inicializado en pin ${hangupGpio}`);
     } catch (error: any) {
       this.isAvailable = false;
@@ -46,18 +63,11 @@ export class GPIOControllerService {
   }
 
   /**
-   * Selecciona un canal del multiplexor
+   * Elimina selectMuxChannel y isSignalActive, ya no aplican.
    */
-  private selectMuxChannel(channel: number): void {
-    if (!this.isAvailable) return;
-    this.muxControlPins[0].writeSync((channel & 0x01) as 0 | 1);
-    this.muxControlPins[1].writeSync(((channel >> 1) & 0x01) as 0 | 1);
-    this.muxControlPins[2].writeSync(((channel >> 2) & 0x01) as 0 | 1);
-    this.muxControlPins[3].writeSync(((channel >> 3) & 0x01) as 0 | 1);
-  }
 
   /**
-   * Escanea el teclado matricial buscando teclas presionadas
+   * Escanea la matriz del teclado de forma directa
    */
   async scanKeypad(): Promise<string | null> {
     if (!this.isAvailable) {
@@ -65,37 +75,52 @@ export class GPIOControllerService {
       return null;
     }
     
+    let detectedKey: string | null = null;
+    
     try {
-      for (let channel = 0; channel < 12; channel++) {
-        this.selectMuxChannel(channel);
-        await this.sleep(10); // Debounce
+      // Pasamos columna por columna tirándola a LOW (0V)
+      for (let c = 0; c < this.colGpios.length; c++) {
+        // Tiramos la columna a LOW
+        this.colGpios[c].writeSync(0);
         
-        if (this.muxSignalPin && this.muxSignalPin.readSync() === 1) {
-          const key = this.keypadMap[channel.toString()];
-          this.logger.debug(`🔢 Tecla presionada: ${key}`);
-          return key;
+        // Micro retardo para estabilización eléctrica (Sync)
+        for (let j = 0; j < 500; j++) {}
+
+        // Leemos cada fila
+        for (let r = 0; r < this.rowGpios.length; r++) {
+          if (this.rowGpios[r].readSync() === 0) {
+            const key = this.KEYPAD_MAP[r][c];
+            const now = Date.now();
+            
+            // Validar Debounce
+            if (key !== this.lastKeyPressed || (now - this.lastKeyTime) > this.DEBOUNCE_TIME_MS) {
+              this.lastKeyPressed = key;
+              this.lastKeyTime = now;
+              detectedKey = key;
+            }
+          }
+        }
+
+        // Devolvemos la columna a HIGH
+        this.colGpios[c].writeSync(1);
+        
+        if (detectedKey) {
+            break; // Si detectamos, cortamos el ciclo de columnas prematuramente
         }
       }
+
+      // Si no detectamos nada, permitimos resetear la última tecla rápidamente
+      if (!detectedKey && (Date.now() - this.lastKeyTime) > 50) {
+        this.lastKeyPressed = null;
+      }
+
+      return detectedKey;
     } catch (error) {
-      this.logger.error('Error escaneando teclado', error);
+      // Usar trace para no spamear console si hay error continuado de hardware
+      this.logger.debug(`Error escaneando teclado matricial: ${(error as any).message}`);
     }
     
     return null;
-  }
-
-  /**
-   * Modo prueba: Lee directamente el GPIO 26 sin multiplexor
-   */
-  isSignalActive(): boolean {
-    if (!this.isAvailable || !this.muxSignalPin) {
-      return false;
-    }
-    
-    try {
-      return this.muxSignalPin.readSync() === 1;
-    } catch (error) {
-      return false;
-    }
   }
 
   /**
@@ -116,23 +141,14 @@ export class GPIOControllerService {
   }
 
   /**
-   * Delay helper
-   */
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  /**
    * Limpieza
    */
   cleanup(): void {
     if (!this.isAvailable) return;
     
     try {
-      this.muxControlPins.forEach(pin => pin.unexport());
-      if (this.muxSignalPin) {
-        this.muxSignalPin.unexport();
-      }
+      this.rowGpios.forEach(pin => pin.unexport());
+      this.colGpios.forEach(pin => pin.unexport());
       if (this.hangupPin) {
         this.hangupPin.unexport();
       }
