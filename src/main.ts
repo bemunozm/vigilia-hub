@@ -9,6 +9,7 @@ import { EchoSuppressionService } from './services/echo-suppression.service';
 import { WebSocketClientService } from './services/websocket-client.service';
 import { ConciergeClientService } from './services/concierge-client.service';
 import { AudioRouterService } from './services/audio-router.service';
+import { DoorControllerService } from './services/door-controller.service';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -23,6 +24,7 @@ class VigiliaHubApplication {
   private connectivity!: ConnectivityService;
   private gpioController!: GPIOControllerService;
   private relayController!: RelayControllerService;
+  private doorController!: DoorControllerService;
   private audioManager!: AudioManagerService;
   private echoSuppression!: EchoSuppressionService;
   private websocketClient!: WebSocketClientService;
@@ -50,6 +52,7 @@ class VigiliaHubApplication {
       logger.log('🔌 Inicializando controladores de hardware...');
       this.gpioController = new GPIOControllerService();
       this.relayController = new RelayControllerService();
+      this.doorController = new DoorControllerService();
       this.audioManager = new AudioManagerService();
       this.echoSuppression = new EchoSuppressionService();
 
@@ -60,6 +63,15 @@ class VigiliaHubApplication {
 
       await this.websocketClient.connect();
       // NOTA: conciergeClient se conecta bajo demanda cuando se inicia una conversación
+      
+      // Suscribirse al evento de apertura de portón/puerta remota
+      this.websocketClient.onDoorOpenCommand(async (type) => {
+        if (type === 'vehicular') {
+          await this.doorController.openGate();
+        } else {
+          await this.doorController.openDoor();
+        }
+      });
 
       // 4. Audio Router (FSM)
       logger.log('🎛️ Inicializando Audio Router...');
@@ -130,6 +142,7 @@ class VigiliaHubApplication {
       if (this.conciergeClient) await this.conciergeClient.cleanup();
       if (this.websocketClient) this.websocketClient.cleanup();
       if (this.audioManager) this.audioManager.cleanup();
+      if (this.doorController) this.doorController.cleanup();
       if (this.relayController) this.relayController.cleanup();
       if (this.gpioController) this.gpioController.cleanup();
       if (this.localCache) await this.localCache.cleanup();

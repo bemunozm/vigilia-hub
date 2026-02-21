@@ -4,8 +4,7 @@ import { Logger } from '../utils/logger';
 export class RelayControllerService {
   private readonly logger = new Logger(RelayControllerService.name);
   
-  private audioRelay1: Gpio | null = null;
-  private audioRelay2: Gpio | null = null;
+  private audioRelay: Gpio | null = null;
   private isAvailable: boolean = false;
   
   private readonly MAX_INTERCEPT_TIME: number;
@@ -14,29 +13,26 @@ export class RelayControllerService {
   private isIntercepting = false;
 
   constructor() {
-    const relay1Pin = parseInt(process.env.RELAY_PIN_1 || '17', 10);
-    const relay2Pin = parseInt(process.env.RELAY_PIN_2 || '27', 10);
+    const relayPin = parseInt(process.env.RELAY_PIN_1 || '17', 10);
     
     this.MAX_INTERCEPT_TIME = parseInt(process.env.MAX_INTERCEPT_TIME_MS || '180000', 10);
     this.RELAY_SETTLING_TIME_MS = parseInt(process.env.RELAY_SETTLING_TIME_MS || '200', 10);
 
     try {
       // Inicializar en estado seguro (LOW = citófono normal)
-      this.audioRelay1 = new Gpio(relay1Pin, 'out');
-      this.audioRelay2 = new Gpio(relay2Pin, 'out');
+      this.audioRelay = new Gpio(relayPin, 'out');
       
       // Establecer estado inicial HIGH (OFF para Active LOW)
-      this.audioRelay1.writeSync(1);
-      this.audioRelay2.writeSync(1);
+      this.audioRelay.writeSync(1);
       
       this.isAvailable = true;
       this.setupSafetyHandlers();
       
-      this.logger.log(`✅ Relés inicializados en GPIO ${relay1Pin}, ${relay2Pin}`);
+      this.logger.log(`✅ Relé de Audio inicializado en GPIO ${relayPin}`);
     } catch (error: any) {
       this.isAvailable = false;
-      this.logger.warn(`⚠️ Relés no disponibles (modo desarrollo sin hardware)`);
-      this.logger.debug(`Detalle error relés: ${error.message}`);
+      this.logger.warn(`⚠️ Relé de audio no disponible (modo desarrollo sin hardware)`);
+      this.logger.debug(`Detalle error relé: ${error.message}`);
       // NO lanzar error - permitir ejecución en desarrollo
     }
   }
@@ -58,8 +54,7 @@ export class RelayControllerService {
       
       if (this.isAvailable) {
         try {
-          this.audioRelay1!.unexport();
-          this.audioRelay2!.unexport();
+          this.audioRelay!.unexport();
         } catch (error) {
           // Ignorar
         }
@@ -97,11 +92,10 @@ export class RelayControllerService {
       return;
     }
 
-    this.logger.log('🔌 ACTIVANDO INTERCEPCIÓN (Relés ON)');
+    this.logger.log('🔌 ACTIVANDO INTERCEPCIÓN (Relé ON)');
     
     // Activar relés (LOW para Active LOW)
-    this.audioRelay1!.writeSync(0);
-    this.audioRelay2!.writeSync(0);
+    this.audioRelay!.writeSync(0);
     
     this.isIntercepting = true;
 
@@ -129,14 +123,13 @@ export class RelayControllerService {
       return;
     }
 
-    this.logger.log('🔓 DESACTIVANDO INTERCEPCIÓN (Relés OFF)');
+    this.logger.log('🔓 DESACTIVANDO INTERCEPCIÓN (Relé OFF)');
     
     // Dar tiempo para que termine el audio final
     await this.delay(500);
     
     // Apagar relés (HIGH para Active LOW)
-    this.audioRelay1!.writeSync(1);
-    this.audioRelay2!.writeSync(1);
+    this.audioRelay!.writeSync(1);
     
     this.isIntercepting = false;
 
@@ -155,8 +148,7 @@ export class RelayControllerService {
     if (!this.isAvailable) return;
     
     try {
-      this.audioRelay1!.writeSync(1); // HIGH (OFF)
-      this.audioRelay2!.writeSync(1); // HIGH (OFF)
+      this.audioRelay!.writeSync(1); // HIGH (OFF)
       this.isIntercepting = false;
       
       if (this.watchdogTimer) {
@@ -190,9 +182,8 @@ export class RelayControllerService {
     if (!this.isAvailable) return;
     
     try {
-      this.audioRelay1!.unexport();
-      this.audioRelay2!.unexport();
-      this.logger.log('Relés limpiados');
+      this.audioRelay!.unexport();
+      this.logger.log('Relé de audio limpiado');
     } catch (error) {
       // Ignorar
     }

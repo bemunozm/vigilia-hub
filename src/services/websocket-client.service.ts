@@ -106,6 +106,20 @@ export class WebSocketClientService {
   }
 
   /**
+   * Evento especial para gatillar apertura de relés desde la nube
+   */
+  onDoorOpenCommand(callback: (type: 'vehicular' | 'pedestrian') => void): void {
+    if (!this.socket) {
+      this.logger.warn(`No se puede suscribir a hub:door_open, socket no está inicializado`);
+      return;
+    }
+    this.socket.on('hub:door_open', (data: { type: 'vehicular' | 'pedestrian', visitId: string }) => {
+      this.logger.log(`📥 Orden de apertura recibida: ${data.type} (Visita ${data.visitId})`);
+      callback(data.type);
+    });
+  }
+
+  /**
    * Inicia heartbeat cada 30s
    */
   private startHeartbeat(): void {
