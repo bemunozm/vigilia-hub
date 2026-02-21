@@ -200,11 +200,11 @@ export class ConciergeClientService {
             },
             turn_detection: {
               type: 'server_vad',
-              threshold: 0.8, // (Antes 0.5). Más alto => Menos sensible al ruido de calle/bocinas
+              threshold: 0.8, // (Antes 0.8). Más alto => Menos sensible al ruido de calle/bocinas
               prefix_padding_ms: 300,
-              silence_duration_ms: 350, 
+              silence_duration_ms: 250, // Ultra-rápido: espera 250ms de silencio para responder
               create_response: true,
-              interrupt_response: true // Que el servidor cancele automáticamente
+              interrupt_response: false // NUEVO: Deshabilitar interrupciones (no corta a la IA)
             }
           },
           output: {
@@ -441,19 +441,11 @@ export class ConciergeClientService {
 
       // VAD
       case 'input_audio_buffer.speech_started':
-        this.logger.log('🎙️ Detectado inicio de habla del usuario (Interrupción)');
+        this.logger.log('🎙️ Detectado inicio de habla del usuario');
         
-        // Barge-in: 
-        // 1. Marcamos interrupción para ignorar paquetes "en vuelo" localmente
-        // 2. Notificamos handlers para limpiar el buffer de audio local (aplay)
-        // 3. Forzamos la cancelación INMEDIATA en el servidor para evitar que 
-        //    OpenAI siga procesando (y tardando) en generar la respuesta anterior.
-        
-        this.isInterrupted = true;
-        
-        if (this.isResponseActive) {
-            this.sendEvent({ type: 'response.cancel' }); // Solo cancelar si hay algo que cancelar
-        }
+        // INTERRUPCIONES DESACTIVADAS:
+        // No marcamos isInterrupted = true, ni enviamos response.cancel.
+        // La IA seguirá hablando y escuchará simultáneamente para el siguiente turno.
         
         this.speechStartedHandlers.forEach(handler => handler());
         break;
@@ -602,40 +594,29 @@ FLUJO DE CONVERSACIÓN (SIGUE ESTE ORDEN ESTRICTAMENTE):
 1. SALUDO INICIAL (di esto EXACTAMENTE una sola vez):
    "¡Hola! Bienvenido al Condominio San Lorenzo. Mi nombre es Sofía y soy la conserje. Veo que deseas visitar la casa ${houseNumber}. ¿Cómo te llamas?"
 
-2. RECOPILACIÓN DE DATOS (UNO POR UNO, en este orden):
+2. RECOPILACIÓN DE DATOS REQUERIDOS:
+   Debes obtener: Nombre, RUT/Pasaporte, Teléfono, Vehículo (Patente opcional) y Motivo.
    
-   a) Nombre:
-      - Espera la respuesta
-      - Guarda con guardar_datos_visitante(nombre: "...")
-      - Di: "Encantada [nombre]. ¿Me podrías dar tu RUT o pasaporte por favor?"
+   ⚠️ REGLA DE ORO DE EXTRACCIÓN MÚLTIPLE ⚠️: 
+   - SI EL VISITANTE TE DA VARIOS DATOS EN UNA SOLA FRASE (ej: "Soy Juan Perez, rut 1234, vengo a ver a mi mamá"), LLAMA a 'guardar_datos_visitante' con TODOS esos datos de una vez: 'guardar_datos_visitante'(nombre: "Juan Perez", rut: "1234", motivo: "ver a mi mamá").
+   - NUNCA VUELVAS A PREGUNTAR por un dato que ya extrajiste o infiriste.
+   - Pide ÚNICAMENTE los datos que te falten.
+
+   Si debes preguntar paso a paso, sigue este flujo resumiendo si corresponde:
    
-   b) RUT/Pasaporte:
-      - Espera la respuesta
-      - Guarda con guardar_datos_visitante(rut: "...")
-      - Si el sistema responde con error (RUT inválido):
-        * Di amablemente: "Disculpa, el RUT que escuché no parece ser válido. ¿Me lo podrías repetir por favor? Dilo dígito por dígito si es necesario."
-        * Vuelve a intentar guardar el RUT
-      - Si se guarda correctamente, di: "Perfecto. ¿Y un número de teléfono de contacto?"
+   a) RUT/Pasaporte:
+      - "Encantada [nombre]. ¿Me podrías dar tu RUT por favor?"
+      - Si hay error: "Disculpa, no entendí bien el RUT. ¿Me lo repites?"
    
-   c) Teléfono:
-      - Espera la respuesta
-      - Guarda con guardar_datos_visitante(telefono: "...")
-      - Di: "Genial. ¿Vienes en vehículo?"
+   b) Teléfono:
+      - "Perfecto. ¿Y un número de teléfono de contacto?"
    
-   d) Vehículo (PREGUNTA PRIMERO):
-      - Si dice SÍ: "¿Me podrías decir la patente del vehículo?"
-        * Espera la respuesta
-        * Guarda con guardar_datos_visitante(patente: "...")
-      - Si dice NO: "Vale, sin problema."
-        * NO preguntes por patente
-        * NO llames a guardar_datos_visitante con el campo patente
-        * Simplemente omite este dato y continúa
-      - Luego di: "¿Cuál es el motivo de tu visita?"
+   c) Vehículo (PREGUNTA PRIMERO):
+      - "¿Vienes en vehículo?" => Si dice SÍ, "¿Me podrías decir la patente?". Si dice NO, sigue adelante.
    
-   e) Motivo:
-      - Espera la respuesta
-      - Guarda con guardar_datos_visitante(motivo: "...")
-      - Di: "Excelente, déjame buscar al residente."
+   d) Motivo:
+      - "¿Cuál es el motivo de tu visita?"
+      - Una vez obtenido todo, di: "Excelente, déjame contactar a la casa."
 
 3. BÚSQUEDA Y NOTIFICACIÓN:
    - Llama buscar_residente(casa: "${houseNumber}")
