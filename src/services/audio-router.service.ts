@@ -108,9 +108,17 @@ export class AudioRouterService {
   }
 
   /**
-   * Maneja presión de tecla
+   * Maneja presión de tecla con anti-rebote estricto a nivel de aplicación
    */
   private handleKeyPress(key: string): void {
+    const now = Date.now();
+    
+    // Ignorar si hace menos de 300ms se presionó LA MISMA TECLA (doble lectura accidental por vibración)
+    if (key === this.keypadBuffer.slice(-1) && (now - this.lastSignalTime) < 300) {
+        return;
+    }
+    this.lastSignalTime = now;
+
     // Resetear timeout del teclado
     if (this.keypadTimeout) {
       clearTimeout(this.keypadTimeout);
