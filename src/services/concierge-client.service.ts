@@ -200,9 +200,9 @@ export class ConciergeClientService {
             },
             turn_detection: {
               type: 'server_vad',
-              threshold: 0.5,
+              threshold: 0.8, // (Antes 0.5). Más alto => Menos sensible al ruido de calle/bocinas
               prefix_padding_ms: 300,
-              silence_duration_ms: 250, // Ultra rápido para calle ruidosa
+              silence_duration_ms: 350, 
               create_response: true,
               interrupt_response: true // Que el servidor cancele automáticamente
             }
@@ -520,7 +520,7 @@ export class ConciergeClientService {
           this.endConversation();
           // Opcional: desconectar completamente
           // this.disconnect(); 
-        }, 4000); // 4 segundos para permitir despedida
+        }, 12000); // 12 segundos para permitir despedida (aumentado desde 4s)
 
         result = {
           finalizada: true,
