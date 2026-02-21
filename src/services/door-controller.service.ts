@@ -34,11 +34,17 @@ export class DoorControllerService {
 
   /**
    * Abre la puerta principal (peatonal)
+   * @param delayBeforeMs Tiempo a esperar antes de abrir (en milisegundos)
    */
-  async openDoor(): Promise<void> {
+  async openDoor(delayBeforeMs: number = 0): Promise<void> {
     if (!this.isAvailable) {
-      this.logger.warn('Simulando apertura de PUERTA PEATONAL (Hardware no disponible)');
+      this.logger.warn(`Simulando apertura de PUERTA PEATONAL (Hardware no disponible) - Delay: ${delayBeforeMs}ms`);
       return;
+    }
+
+    if (delayBeforeMs > 0) {
+      this.logger.log(`⏳ Esperando ${delayBeforeMs}ms antes de abrir Puerta Peatonal...`);
+      await this.delay(delayBeforeMs);
     }
 
     this.logger.log('🚪 Abriendo Puerta Peatonal...');
@@ -62,11 +68,17 @@ export class DoorControllerService {
 
   /**
    * Abre el portón vehicular
+   * @param delayBeforeMs Tiempo a esperar antes de abrir (en milisegundos)
    */
-  async openGate(): Promise<void> {
+  async openGate(delayBeforeMs: number = 0): Promise<void> {
     if (!this.isAvailable) {
-      this.logger.warn('Simulando apertura de PORTÓN VEHICULAR (Hardware no disponible)');
+      this.logger.warn(`Simulando apertura de PORTÓN VEHICULAR (Hardware no disponible) - Delay: ${delayBeforeMs}ms`);
       return;
+    }
+
+    if (delayBeforeMs > 0) {
+      this.logger.log(`⏳ Esperando ${delayBeforeMs}ms antes de abrir Portón Vehicular...`);
+      await this.delay(delayBeforeMs);
     }
 
     this.logger.log('🚗 Abriendo Portón Vehicular...');

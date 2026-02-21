@@ -66,10 +66,12 @@ class VigiliaHubApplication {
       
       // Suscribirse al evento de apertura de portón/puerta remota
       this.websocketClient.onDoorOpenCommand(async (type) => {
+        // Enviar 6 segundos de delay antes de abrir
+        const DELAY_MS = 6000;
         if (type === 'vehicular') {
-          await this.doorController.openGate();
+          await this.doorController.openGate(DELAY_MS);
         } else {
-          await this.doorController.openDoor();
+          await this.doorController.openDoor(DELAY_MS);
         }
       });
 
