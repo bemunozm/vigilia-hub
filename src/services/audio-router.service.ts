@@ -73,32 +73,22 @@ export class AudioRouterService {
    */
   private startKeypadScanning(): void {
     this.scanInterval = setInterval(async () => {
-      // Monitorear colgar durante llamada analógica
+      // 1. Monitorear Hook Switch Físico para colgar
       if (this.isAnalogCallActive) {
-        const hangupDetected = this.gpioController.isHangupDetected();
-        if (hangupDetected) {
+        if (this.gpioController.isHangupDetected()) {
           this.logger.log('📞 Colgado detectado - Finalizando llamada analógica');
           this.endAnalogCall();
         }
-        return; // No procesar teclas durante llamada activa
       }
 
-      // Monitorear colgar durante conversación con IA (solo si ya está establecida)
       if (this.state === AudioState.AI_INTERCEPT && !this.isEstablishingAIConnection) {
-        const hangupDetected = this.gpioController.isHangupDetected();
-        if (hangupDetected) {
+        if (this.gpioController.isHangupDetected()) {
           this.logger.log('📞 Colgado detectado - Finalizando conversación IA');
           this.endAICall();
         }
-        return; // No procesar teclas durante conversación IA
       }
 
-      // Solo procesar teclas si estamos en TRANSPARENT y sin llamada activa
-      if (this.state !== AudioState.TRANSPARENT) {
-        return;
-      }
-
-      // Leer teclado matricial
+      // 2. Leer teclado matricial SIEMPRE (Delegar el bloqueo de comportamiento a handleKeyPress)
       const key = await this.gpioController.scanKeypad();
       
       if (key !== null) {
@@ -129,13 +119,19 @@ export class AudioRouterService {
       return;
     }
 
-    // MODO LABORATORIO: Permitir colgar la llamada de IA usando la tecla '*'
-    if (this.state === AudioState.AI_INTERCEPT) {
+    // MODO LABORATORIO: Permitir colgar llamadas activas usando la tecla '*'
+    if (this.state === AudioState.AI_INTERCEPT || this.isAnalogCallActive) {
         if (key === '*') {
-            this.logger.log('🛑 Tecla de aborto (*) presionada: Colgando llamada IA manualmente');
-            this.endAICall();
+            this.logger.log('🛑 Tecla de aborto (*) presionada: Colgando llamada manualmente');
+            if (this.state === AudioState.AI_INTERCEPT) this.endAICall();
+            if (this.isAnalogCallActive) this.endAnalogCall();
         }
-        return; // Ignorar el resto de teclas durante la llamada
+        return; // Ignorar el resto de teclas mientras hay llamada
+    }
+
+    // Si el router no está listo para escuchar botones (ej. conectando), ignorar
+    if (this.state !== AudioState.TRANSPARENT && this.state !== AudioState.SCANNING_KEYPAD) {
+       return;
     }
 
     // Transición a SCANNING_KEYPAD si estábamos en TRANSPARENT
