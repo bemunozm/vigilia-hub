@@ -437,14 +437,17 @@ export class ConciergeClientService {
 
       // VAD
       case 'input_audio_buffer.speech_started':
-        this.logger.log('🎙️ Detectado inicio de habla del usuario');
+        this.logger.log('🎙️ Detectado inicio de habla del usuario (Interrupción)');
         
         // Barge-in: 
-        // 1. Marcamos interrupción para ignorar paquetes "en vuelo"
+        // 1. Marcamos interrupción para ignorar paquetes "en vuelo" localmente
         // 2. Notificamos handlers para limpiar el buffer de audio local (aplay)
-        // NOTA: No enviamos response.cancel manual porque interrupt_response: true lo hace en el servidor
+        // 3. Forzamos la cancelación INMEDIATA en el servidor para evitar que 
+        //    OpenAI siga procesando (y tardando) en generar la respuesta anterior.
         
         this.isInterrupted = true;
+        this.sendEvent({ type: 'response.cancel' }); // ¡Crucial para recuperar velocidad!
+        
         this.speechStartedHandlers.forEach(handler => handler());
         break;
 
