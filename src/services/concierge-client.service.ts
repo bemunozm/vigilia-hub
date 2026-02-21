@@ -21,6 +21,7 @@ export class ConciergeClientService {
   private speechStartedHandlers: (() => void)[] = [];
   private targetHouse: string | null = null;
   private isInterrupted = false;
+  private isResponseActive = false; // <-- NUEVO: Para saber si vale la pena cancelar
   
   // Configuración del modelo Realtime (versión GA estable)
   private readonly REALTIME_MODEL = 'gpt-realtime-mini-2025-12-15';
@@ -386,11 +387,13 @@ export class ConciergeClientService {
       case 'response.created':
         this.logger.log(`🎬 Respuesta iniciada: ${event.response?.id}`);
         this.isInterrupted = false; // Nueva respuesta, resetear flag
+        this.isResponseActive = true; // <-- NUEVO
         break;
 
       case 'response.done':
         this.logger.log(`✅ Respuesta completa: ${event.response?.id}`);
         this.logger.log('Detalles:', JSON.stringify(event.response, null, 2));
+        this.isResponseActive = false; // <-- NUEVO
         break;
 
       case 'response.content_part.added':
@@ -446,7 +449,10 @@ export class ConciergeClientService {
         //    OpenAI siga procesando (y tardando) en generar la respuesta anterior.
         
         this.isInterrupted = true;
-        this.sendEvent({ type: 'response.cancel' }); // ¡Crucial para recuperar velocidad!
+        
+        if (this.isResponseActive) {
+            this.sendEvent({ type: 'response.cancel' }); // Solo cancelar si hay algo que cancelar
+        }
         
         this.speechStartedHandlers.forEach(handler => handler());
         break;
