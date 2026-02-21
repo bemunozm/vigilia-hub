@@ -5,29 +5,25 @@ export class DoorControllerService {
   private readonly logger = new Logger(DoorControllerService.name);
   
   private doorRelay: Gpio | null = null;
-  private gateRelay: Gpio | null = null;
   private isAvailable: boolean = false;
   
   private readonly DOOR_PULSE_MS = 3000;
 
   constructor() {
     const doorRelayPin = parseInt(process.env.RELAY_DOOR_PIN || '27', 10);
-    const gateRelayPin = parseInt(process.env.RELAY_GATE_PIN || '22', 10);
 
     try {
-      // Configurar relés como salida (LOW = Activado, HIGH = Desactivado)
+      // Configurar relé como salida (LOW = Activado, HIGH = Desactivado)
       this.doorRelay = new Gpio(doorRelayPin, 'out');
-      this.gateRelay = new Gpio(gateRelayPin, 'out');
       
-      // Estado seguro por defecto: relés apagados (HIGH)
+      // Estado seguro por defecto: relé apagado (HIGH)
       this.doorRelay.writeSync(1);
-      this.gateRelay.writeSync(1);
       
       this.isAvailable = true;
-      this.logger.log(`✅ Controladores de puertas inicializados (Puerta: ${doorRelayPin}, Portón: ${gateRelayPin})`);
+      this.logger.log(`✅ Controlador de relé (Puerta/Portón) inicializado en GPIO ${doorRelayPin}`);
     } catch (error: any) {
       this.isAvailable = false;
-      this.logger.warn(`⚠️ Relés de puertas no disponibles (modo desarrollo)`);
+      this.logger.warn(`⚠️ Relé de puerta no disponible (modo desarrollo)`);
       this.logger.debug(`Detalle error: ${error.message}`);
     }
   }
@@ -69,22 +65,18 @@ export class DoorControllerService {
       return;
     }
 
-    this.logger.log('🚗 Abriendo Portón Vehicular...');
+    this.logger.log('🚗 Abriendo Portón Vehicular (Vía Relé Principal)...');
     
+    // Como tenemos solo un relé doble, usamos el mismo pulso físico para ambas puertas
+    // (Cableadas en paralelo al mismo relé)
     try {
-      // Activar relé (Active LOW)
-      this.gateRelay!.writeSync(0);
-      
-      // Mantener presionado
+      this.doorRelay!.writeSync(0);
       await this.delay(this.DOOR_PULSE_MS);
-      
-      // Soltar relé
-      this.gateRelay!.writeSync(1);
+      this.doorRelay!.writeSync(1);
       this.logger.log('✅ Portón Vehicular cerrado (Relé desactivado)');
     } catch (error) {
       this.logger.error('Error al abrir el portón vehicular', error);
-      // Intentar forzar apagado seguro
-      try { this.gateRelay?.writeSync(1); } catch (e) {}
+      try { this.doorRelay?.writeSync(1); } catch (e) {}
     }
   }
 
@@ -96,10 +88,8 @@ export class DoorControllerService {
     if (!this.isAvailable) return;
     try {
       this.doorRelay?.writeSync(1);
-      this.gateRelay?.writeSync(1);
       this.doorRelay?.unexport();
-      this.gateRelay?.unexport();
-      this.logger.log('Relés de puertas limpiados');
+      this.logger.log('Relé de accesos limpiado');
     } catch (error) {}
   }
 }
