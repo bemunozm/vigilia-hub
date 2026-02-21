@@ -109,7 +109,7 @@ export class AudioRouterService {
     }
     this.lastSignalTime = now;
 
-    // Resetear timeout del teclado
+    // Cancelar el timeout anterior
     if (this.keypadTimeout) {
       clearTimeout(this.keypadTimeout);
     }
@@ -139,28 +139,33 @@ export class AudioRouterService {
       this.setState(AudioState.SCANNING_KEYPAD);
     }
 
-    // Agregar tecla al buffer
+    // Procesar la tecla
     if (key === '#') {
-      // Fin de marcación
-      this.processHouseNumber();
+      // Fin de marcación confirmado
+      if (this.keypadBuffer.length > 0) {
+          this.processHouseNumber();
+      } else {
+          this.logger.warn('⚠️ Se presionó # pero no hay número marcado');
+      }
     } else if (key === '*') {
-      // Cancelar
+      // Cancelar / Borrar marcación actual
       this.clearKeypadBuffer();
+      this.logger.log('🗑️ Marcación cancelada (Tecla *)');
       this.returnToTransparent();
     } else {
-      // Dígito
+      // Es un dígito '0'-'9', 'A'-'D'
       this.keypadBuffer += key;
-      this.logger.debug(`🔢 Buffer: ${this.keypadBuffer}`);
+      this.logger.log(`\x1b[36m👉 Marcando... [ ${this.keypadBuffer} ]\x1b[0m`);
     }
 
-    // Timeout: si no presionan # en 5s, procesar
+    // Timeout: Solo limpia el buffer si pasa mucho tiempo (15s), pero NO LLAMA SOLO.
     this.keypadTimeout = setTimeout(() => {
       if (this.keypadBuffer.length > 0) {
-        this.processHouseNumber();
-      } else {
+        this.logger.warn('⏰ Demasiado tiempo sin confirmar con #, borrando número');
+        this.clearKeypadBuffer();
         this.returnToTransparent();
       }
-    }, this.KEYPAD_TIMEOUT_MS);
+    }, 15000); // 15 segundos para apretar el #
   }
 
   /**
@@ -353,17 +358,19 @@ export class AudioRouterService {
     this.logger.log('🛑 Saliendo de AI_INTERCEPT');
     this.isEstablishingAIConnection = false; // Resetear flag
     
-    // Finalizar conversación
+    // Finalizar conversación y audio inmediatamente
     this.conciergeClient.endConversation();
-    
-    // Detener audio
     this.audioManager.stopCapture();
     this.audioManager.stopPlayback();
     
-    // Desactivar relés (con delay de 500ms para terminar audio)
+    // Esperar a que el parlante se quede callado antes de devolver la línea a la calle
+    await this.sleep(400); 
+
+    // Desactivar relés 
     await this.relayController.disableInterception();
+    this.logger.log('🔌 Relés apagados (Citófono normal activado)');
     
-    // Entrar en cooldown
+    // Entrar en cooldown largo (evita que rebotes del micrófono disparen algo más)
     await this.enterCooldownState();
   }
 
