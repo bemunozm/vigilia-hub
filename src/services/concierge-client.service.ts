@@ -753,6 +753,12 @@ REGLAS IMPORTANTES:
     
     // Notificar a los suscriptores (ej. AudioRouter) para que apaguen sus flujos y relés
     this.conversationEndedHandlers.forEach(handler => handler());
+
+    // Limpiar handlers para evitar ejecución duplicada en la siguiente llamada
+    this.audioHandlers = [];
+    this.audioDoneHandlers = [];
+    this.speechStartedHandlers = [];
+    this.conversationEndedHandlers = [];
     
     // NOTA: Eliminamos la creación forzada de respuesta ('response.create')
     // para evitar que el agente se despida múltiples veces o intente "rellenar" el silencio.
