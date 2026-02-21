@@ -86,6 +86,26 @@ export class WebSocketClientService {
   }
 
   /**
+   * Permite suscribirse a un evento dinámico de Socket.IO
+   */
+  onEvent(eventName: string, callback: (data: any) => void): void {
+    if (!this.socket) {
+      this.logger.warn(`No se puede suscribir a ${eventName}, socket no está inicializado`);
+      return;
+    }
+    this.socket.on(eventName, callback);
+    this.logger.debug(`👂 Suscrito a evento WebSocket: ${eventName}`);
+  }
+
+  /**
+   * Elimina suscripción a un evento de Socket.IO
+   */
+  offEvent(eventName: string): void {
+    if (!this.socket) return;
+    this.socket.off(eventName);
+  }
+
+  /**
    * Inicia heartbeat cada 30s
    */
   private startHeartbeat(): void {

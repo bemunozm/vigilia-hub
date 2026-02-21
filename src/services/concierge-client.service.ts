@@ -104,6 +104,9 @@ export class ConciergeClientService {
         });
       });
 
+      // === NUEVO: Suscribirse a los eventos del WebSocket del Backend ===
+      this.subscribeToBackendEvents(sessionId);
+
     } catch (error) {
       this.logger.error('❌ Error conectando a OpenAI:', error);
       if (axios.isAxiosError(error)) {
@@ -111,6 +114,40 @@ export class ConciergeClientService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Suscribe a los eventos del backend para la sesión actual
+   */
+  private subscribeToBackendEvents(sessionId: string): void {
+      const eventName = `visitor:response:${sessionId}`;
+      
+      this.websocketClient.onEvent(eventName, (data: any) => {
+          this.logger.log(`🔔 Evento de residente recibido! Decisión: ${data.approved ? 'APROBADA' : 'RECHAZADA'}`);
+          
+          if (!this.conversationActive) {
+             this.logger.warn('Se recibió la decisión, pero la conversación ya había terminado.');
+             return;
+          }
+
+          // Inyectar el mensaje del sistema notificando la decisión
+          this.sendEvent({
+              type: 'conversation.item.create',
+              item: {
+                  type: 'message',
+                  role: 'system',
+                  content: [
+                      {
+                          type: 'input_text',
+                          text: `ATENCIÓN: EL SISTEMA HA RECIBIDO LA RESPUESTA DEL RESIDENTE. La visita ha sido ${data.approved ? 'APROBADA (Debe ingresar)' : 'RECHAZADA (No debe ingresar)'}. Procede INMEDIATAMENTE al paso 5 del flujo y dáselo a conocer al visitante basado en esta respuesta oficial.`
+                      }
+                  ]
+              }
+          });
+
+          // Forzar la generación de la respuesta
+          this.sendEvent({ type: 'response.create' });
+      });
   }
 
   /**
@@ -163,7 +200,7 @@ export class ConciergeClientService {
               type: 'server_vad',
               threshold: 0.5,
               prefix_padding_ms: 300,
-              silence_duration_ms: 500,
+              silence_duration_ms: 300, // Hacerlo más rápido al cortar (antes 500)
               create_response: true,
               interrupt_response: true // Que el servidor cancele automáticamente
             }
@@ -747,6 +784,9 @@ REGLAS IMPORTANTES:
 
     // Notificar al backend que finalizó la sesión
     if (this.currentSessionId) {
+      // Limpiar listener de Socket.IO
+      this.websocketClient.offEvent(`visitor:response:${this.currentSessionId}`);
+
       try {
         await axios.post(`${this.backendUrl}/api/v1/concierge/session/${this.currentSessionId}/end`, {
           finalStatus: 'completed',
