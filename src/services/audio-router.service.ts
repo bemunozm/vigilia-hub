@@ -349,6 +349,17 @@ export class AudioRouterService {
         this.audioManager.interruptPlayback();
         this.echoSuppression.notifySpeakerInactive(); // Rehabilitar mic inmediatamente (aunque debería estarlo)
     });
+
+    // Manejar finalización natural o forzada por la IA (tool call 'finalizar_llamada')
+    this.conciergeClient.onConversationEnded(() => {
+        this.logger.log('📞 IA finalizó la conversación - Cortando citófono físico');
+        
+        // Ejecutamos la salida asíncrona sin bloquear el hilo actual
+        // exitAIInterceptState apagará relés, detendrá audio y entrará en COOLDOWN
+        this.exitAIInterceptState().catch(err => {
+            this.logger.error('Error al forzar salida de AI_INTERCEPT:', err);
+        });
+    });
   }
 
   /**

@@ -19,6 +19,7 @@ export class ConciergeClientService {
   private audioHandlers: ((audioBuffer: Buffer) => void)[] = [];
   private audioDoneHandlers: (() => void)[] = [];
   private speechStartedHandlers: (() => void)[] = [];
+  private conversationEndedHandlers: (() => void)[] = []; // <-- NUEVO
   private targetHouse: string | null = null;
   private isInterrupted = false;
   private isResponseActive = false; // <-- NUEVO: Para saber si vale la pena cancelar
@@ -748,6 +749,9 @@ REGLAS IMPORTANTES:
     this.conversationActive = false;
     this.targetHouse = null;
     
+    // Notificar a los suscriptores (ej. AudioRouter) para que apaguen sus flujos y relés
+    this.conversationEndedHandlers.forEach(handler => handler());
+    
     // NOTA: Eliminamos la creación forzada de respuesta ('response.create')
     // para evitar que el agente se despida múltiples veces o intente "rellenar" el silencio.
   }
@@ -771,6 +775,13 @@ REGLAS IMPORTANTES:
    */
   onSpeechStarted(handler: () => void): void {
     this.speechStartedHandlers.push(handler);
+  }
+
+  /**
+   * Registra un handler para cuando la conversación finaliza (ej. por tool call)
+   */
+  onConversationEnded(handler: () => void): void {
+    this.conversationEndedHandlers.push(handler);
   }
 
   /**
