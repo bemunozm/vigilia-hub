@@ -200,7 +200,7 @@ export class ConciergeClientService {
               type: 'server_vad',
               threshold: 0.5,
               prefix_padding_ms: 300,
-              silence_duration_ms: 300, // Hacerlo más rápido al cortar (antes 500)
+              silence_duration_ms: 250, // Ultra rápido para calle ruidosa
               create_response: true,
               interrupt_response: true // Que el servidor cancele automáticamente
             }
