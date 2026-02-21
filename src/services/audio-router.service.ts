@@ -116,9 +116,18 @@ export class AudioRouterService {
       clearTimeout(this.keypadTimeout);
     }
 
-    // Si estamos en cooldown o AI, ignorar teclas
-    if (this.state === AudioState.COOLDOWN || this.state === AudioState.AI_INTERCEPT) {
+    // Si estamos en cooldown, ignorar teclas
+    if (this.state === AudioState.COOLDOWN) {
       return;
+    }
+
+    // MODO LABORATORIO: Permitir colgar la llamada de IA usando la tecla '*'
+    if (this.state === AudioState.AI_INTERCEPT) {
+        if (key === '*') {
+            this.logger.log('🛑 Tecla de aborto (*) presionada: Colgando llamada IA manualmente');
+            this.endAICall();
+        }
+        return; // Ignorar el resto de teclas durante la llamada
     }
 
     // Transición a SCANNING_KEYPAD si estábamos en TRANSPARENT
