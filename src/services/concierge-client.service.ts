@@ -538,10 +538,14 @@ export class ConciergeClientService {
         }
       });
 
-      // Solicitar que el modelo procese el resultado
-      this.sendEvent({
-        type: 'response.create'
-      });
+      // Solicitar que el modelo procese el resultado, SOLO si no estamos finalizando
+      if (name !== 'finalizar_llamada') {
+         this.sendEvent({
+           type: 'response.create'
+         });
+      } else {
+         this.logger.log(`⏳ Tool finalizar_llamada completada. Esperando cierre...`);
+      }
 
       this.logger.log(`✅ Tool ${name} completada`);
     } catch (error) {
@@ -738,10 +742,8 @@ REGLAS IMPORTANTES:
     this.conversationActive = false;
     this.targetHouse = null;
     
-    // Crear respuesta para procesar el audio pendiente
-    this.sendEvent({
-      type: 'response.create'
-    });
+    // NOTA: Eliminamos la creación forzada de respuesta ('response.create')
+    // para evitar que el agente se despida múltiples veces o intente "rellenar" el silencio.
   }
 
   /**
